@@ -1,0 +1,24 @@
+using DRIT.Drawing.Metafile.Emf;
+using DRIT.Drawing.Metafile.Emf.Records;
+
+namespace DRIT.Drawing.Metafile.Emf.Records.StateRecordTypes
+{
+    using DRIT.Drawing.Metafile.Emf.Enumerations;
+    using System.IO;
+
+    internal class EMR_SETMETARGN : Record
+    {
+        public EMR_SETMETARGN()
+        {
+            Header = new RecordHeader { Type = RecordType.EMR_SETMETARGN };
+        }
+
+        public override void Read(BinaryReader reader)
+        {
+        }
+
+        public override void Write(BinaryWriter writer)
+        {
+        }
+    }
+}
