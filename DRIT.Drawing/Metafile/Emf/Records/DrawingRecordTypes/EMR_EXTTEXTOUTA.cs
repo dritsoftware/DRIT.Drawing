@@ -51,7 +51,7 @@ namespace DRIT.Drawing.Metafile.Emf.Records.DrawingRecordTypes
             IGraphicsMode = (GraphicsMode)reader.ReadUInt32();
             ExScale = reader.ReadSingle();
             EyScale = reader.ReadSingle();
-            EmrText.Read(reader);
+            EmrText.Read(reader, 8 + 28);
         }
 
         public override void Write(BinaryWriter writer)
@@ -60,7 +60,7 @@ namespace DRIT.Drawing.Metafile.Emf.Records.DrawingRecordTypes
             writer.Write((uint)this.IGraphicsMode);
             writer.Write(this.ExScale);
             writer.Write(this.EyScale);
-            EmrText.Write(writer);
+            EmrText.Write(writer, 8 + 28);
         }
     }
 }

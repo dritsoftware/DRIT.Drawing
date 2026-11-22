@@ -19,7 +19,11 @@ namespace DRIT.Drawing.Font.Core
             _fonts = fonts ?? throw new System.ArgumentNullException(nameof(fonts));
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Gets the font face at the specified zero-based index.
+        /// </summary>
+        /// <param name="index">The zero-based index of the font face to retrieve.</param>
+        /// <returns>The font face at <paramref name="index"/>.</returns>
         public IFont this[int index] => _fonts[index];
 
         /// <inheritdoc/>

@@ -11,7 +11,7 @@
         {
             get
             {
-                return Convert.ToBoolean(BitHelper.GetBits(this.Header.Flags, 0, 1, false));
+                return Convert.ToBoolean(BitHelper.GetBits(this.Header.Flags, 15, 1, false));
             }
         }
 
@@ -19,7 +19,7 @@
         {
             get
             {
-                return (ObjectType)BitHelper.GetBits(this.Header.Flags, 1, 7, false);
+                return (ObjectType)BitHelper.GetBits(this.Header.Flags, 8, 7, false);
             }
         }
 
@@ -27,7 +27,7 @@
         {
             get
             {
-                return Convert.ToByte(BitHelper.GetBits(this.Header.Flags, 8, 8, false));
+                return Convert.ToByte(BitHelper.GetBits(this.Header.Flags, 0, 8, false));
             }
         }
 

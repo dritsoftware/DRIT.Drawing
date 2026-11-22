@@ -11,6 +11,13 @@ namespace DRIT.Drawing.Text
     public sealed class PrivateFontCollection : FontCollection
     {
         /// <summary>
+        /// Initializes a empty <see cref="PrivateFontCollection"/> instance.
+        /// </summary>
+        public PrivateFontCollection()
+        {
+        }
+
+        /// <summary>
         /// Adds a font from the specified file to the collection.
         /// </summary>
         /// <param name="filename">The path to the font file.</param>

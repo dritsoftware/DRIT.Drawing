@@ -16,5 +16,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\DRIT.Drawing\DRIT.Drawing.csproj" />
+    <ProjectReference Include="..\DRIT.Drawing.Examples\DRIT.Drawing.Examples.csproj" />
   </ItemGroup>
 </Project>

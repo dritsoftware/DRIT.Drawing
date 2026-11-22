@@ -4,15 +4,15 @@ namespace DRIT.Drawing.Metafile.EmfPlus.Records
 
     internal class EmfPlusDrawPathRecord : Record
     {
-        public ushort PenId => Header.Flags;
+        public ushort PathId => Header.Flags;
 
-        public uint PathId;
+        public uint PenId;
 
         public override void Read(BinaryReader reader)
         {
             if (Header.DataSize >= 4)
             {
-                PathId = reader.ReadUInt32();
+                PenId = reader.ReadUInt32();
                 var remaining = (int)Header.DataSize - 4;
                 if (remaining > 0)
                 {

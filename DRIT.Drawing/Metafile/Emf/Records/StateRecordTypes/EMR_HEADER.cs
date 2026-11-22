@@ -26,7 +26,7 @@ namespace DRIT.Drawing.Metafile.Emf.Records.StateRecordTypes
         {
             HeaderObject.Read(reader);
 
-            long bytesRead = 72;
+            long bytesRead = 80;
             long remaining = Header.Size - 8 - bytesRead;
 
             if (remaining >= 12)

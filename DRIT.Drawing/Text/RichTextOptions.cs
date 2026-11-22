@@ -5,8 +5,8 @@ using DRIT.Drawing.Enums;
 namespace DRIT.Drawing.Text
 {
     /// <summary>
-    /// Rich-text layout options for <see cref="Graphics.DrawRichText"/> and
-    /// <see cref="Graphics.MeasureRichText"/>. Carries a list of
+    /// Rich-text layout options for <c>Graphics.DrawRichText</c> and
+    /// <c>Graphics.MeasureRichText</c>. Carries a list of
     /// <see cref="RichTextRun"/> segments and default font properties.
     /// </summary>
     public sealed class RichTextOptions

@@ -11,15 +11,20 @@ namespace DRIT.Drawing.Font.Encoding
     public sealed class TtfUnicodeEncoding : IFontEncoding
     {
         private readonly TtfCMapFormatBaseTable _cmapTable;
+        private readonly bool _legacySymbolFont;
 
         /// <param name="cmapTable">
         /// The best Unicode-capable subtable as returned by
         /// <see cref="TtfCMapTable.FindUnicodeTable"/>.
         /// Must not be null.
         /// </param>
-        public TtfUnicodeEncoding(TtfCMapFormatBaseTable cmapTable)
+        /// <param name="legacySymbolFont">
+        /// <c>true</c> when the font uses the Windows legacy symbol-font private-use mapping.
+        /// </param>
+        public TtfUnicodeEncoding(TtfCMapFormatBaseTable cmapTable, bool legacySymbolFont = false)
         {
             _cmapTable = cmapTable;
+            _legacySymbolFont = legacySymbolFont;
         }
 
         /// <inheritdoc/>
@@ -30,6 +35,8 @@ namespace DRIT.Drawing.Font.Encoding
         public GlyphId? DecodeToGid(uint codePoint)
         {
             uint glyphIndex = _cmapTable.GetGlyphIndex(codePoint);
+            if (glyphIndex == 0 && _legacySymbolFont && codePoint <= 0xFF)
+                glyphIndex = _cmapTable.GetGlyphIndex(0xF000u | codePoint);
             return new GlyphUInt32Id(glyphIndex);
         }
 
@@ -39,11 +46,11 @@ namespace DRIT.Drawing.Font.Encoding
         /// <inheritdoc/>
         public bool TryGetGlyph(uint codePoint, out uint glyphId)
         {
-            glyphId = _cmapTable.GetGlyphIndex(codePoint);
+            glyphId = DecodeToGid(codePoint) is GlyphUInt32Id id ? id.Value : 0;
             return glyphId != 0;
         }
 
         /// <inheritdoc/>
-        public bool HasGlyph(uint codePoint) => _cmapTable.GetGlyphIndex(codePoint) != 0;
+        public bool HasGlyph(uint codePoint) => DecodeToGid(codePoint) is GlyphUInt32Id id && id.Value != 0;
     }
 }

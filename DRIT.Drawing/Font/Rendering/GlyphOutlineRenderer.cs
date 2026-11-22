@@ -30,7 +30,7 @@ namespace DRIT.Drawing.Font.Rendering
         /// Decomposes the outline of the glyph identified by <paramref name="gid"/>
         /// and delivers drawing commands to <paramref name="painter"/>.
         /// </summary>
-        /// <param name="gid">Glyph identifier, typically from <see cref="IFontEncoding.DecodeToGid"/>.</param>
+        /// <param name="gid">Glyph identifier, typically from <see cref="DRIT.Drawing.Font.Encoding.IFontEncoding.DecodeToGid(uint)"/>.</param>
         /// <param name="painter">Receives the MoveTo / LineTo / CurveTo / ClosePath calls.</param>
         /// <exception cref="ArgumentNullException"><paramref name="gid"/> or <paramref name="painter"/> is null.</exception>
         /// <exception cref="NotSupportedException">

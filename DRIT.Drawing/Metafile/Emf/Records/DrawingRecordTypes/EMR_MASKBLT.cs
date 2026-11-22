@@ -21,7 +21,7 @@ namespace DRIT.Drawing.Metafile.Emf.Records.DrawingRecordTypes
 
         public int CyDest;
 
-        public Metafile.Wmf.Enumerations.TernaryRasterOperation BitBltRasterOperation;
+        public EmfTernaryRasterOperation BitBltRasterOperation;
 
         public int XSrc;
 
@@ -77,7 +77,7 @@ namespace DRIT.Drawing.Metafile.Emf.Records.DrawingRecordTypes
             YDest = reader.ReadInt32();
             CxDest = reader.ReadInt32();
             CyDest = reader.ReadInt32();
-            BitBltRasterOperation = (Metafile.Wmf.Enumerations.TernaryRasterOperation)reader.ReadUInt32();
+            BitBltRasterOperation = (EmfTernaryRasterOperation)reader.ReadUInt32();
             XSrc = reader.ReadInt32();
             YSrc = reader.ReadInt32();
             XFormSrc.Read(reader);

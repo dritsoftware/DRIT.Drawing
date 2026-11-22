@@ -8,6 +8,13 @@ namespace DRIT.Drawing.Imaging
     public sealed class ColorMap
     {
         /// <summary>
+        /// Initializes a empty <see cref="ColorMap"/> instance.
+        /// </summary>
+        public ColorMap()
+        {
+        }
+
+        /// <summary>
         /// Gets or sets the source color to map from.
         /// </summary>
         public Color OldColor { get; set; }

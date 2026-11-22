@@ -155,6 +155,7 @@ namespace DRIT.Drawing.Text
     {
         private readonly Dictionary<Enums.FontStyle, FontMetricsData> _metricsByStyle;
         private readonly Dictionary<Enums.FontStyle, IFont>           _fontsByStyle = new Dictionary<Enums.FontStyle, IFont>();
+        private GenericFontFamilies? _generic;
 
         public FontFamilyData(string name)
         {
@@ -189,6 +190,7 @@ namespace DRIT.Drawing.Text
             }
 
             var data = new FontFamilyData(name);
+            data._generic = genericFamily;
             data.AddDefaultStyles(metrics);
             return data;
         }
@@ -204,6 +206,7 @@ namespace DRIT.Drawing.Text
         public FontFamilyData Clone()
         {
             var clone = new FontFamilyData(Name);
+            clone._generic = _generic;
             foreach (var pair in _metricsByStyle)
                 clone._metricsByStyle[pair.Key] = pair.Value;
             foreach (var pair in _fontsByStyle)
@@ -236,11 +239,19 @@ namespace DRIT.Drawing.Text
                 return face;
             foreach (var pair in _fontsByStyle)
                 return pair.Value;
-            return null;
+
+            // A generic family has no font file of its own: borrow the outlines of the
+            // installed family that stands in for it on this platform.
+            return GenericTarget()?.GetFontFace(style);
         }
 
         public FontMetricsData GetMetrics(Enums.FontStyle style)
         {
+            // Outlines come from the stand-in family, so its metrics must be used with them.
+            FontFamily? target = GenericTarget();
+            if (target != null)
+                return target.GetMetricsData(style);
+
             if (_metricsByStyle.TryGetValue(NormalizeStyle(style), out var metrics))
                 return metrics;
 
@@ -252,6 +263,11 @@ namespace DRIT.Drawing.Text
 
             return GuessGenericMetrics(Name);
         }
+
+        private FontFamily? GenericTarget()
+            => _generic.HasValue && _fontsByStyle.Count == 0
+                ? GenericFontResolver.Resolve(_generic.Value)
+                : null;
 
         private void AddDefaultStyles(FontMetricsData metrics)
         {

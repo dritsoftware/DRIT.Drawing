@@ -42,7 +42,7 @@ namespace DRIT.Drawing.Vector.Svg
             // Font
             float fontSize = SvgStyleParser.ParseLength(style.FontSize, 16f);
             FontStyle fontStyle = ParseFontStyle(style.FontStyleVal, style.FontWeight);
-            var font = new DRIT.Drawing.Text.Font(style.FontFamily, fontSize, fontStyle, GraphicsUnit.Pixel);
+            var font = new DRIT.Drawing.Text.Font(ResolveFontFamily(style.FontFamily), fontSize, fontStyle, GraphicsUnit.Pixel);
 
             // Brush
             float fillOpacity = SvgStyleParser.ParseFloat(style.FillOpacity, 1f) *
@@ -128,6 +128,30 @@ namespace DRIT.Drawing.Vector.Svg
                 }
             }
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// Resolves a CSS <c>font-family</c> list to a family: the first entry is used, quotes are removed,
+        /// and the CSS generic keywords map to the generic families.
+        /// </summary>
+        internal static DRIT.Drawing.Text.FontFamily ResolveFontFamily(string? cssFamilyList)
+        {
+            string first = (cssFamilyList ?? string.Empty).Split(',')[0].Trim().Trim('\'', '"').Trim();
+            switch (first.ToLowerInvariant())
+            {
+                case "":
+                    return new DRIT.Drawing.Text.FontFamily("Arial");
+                case "serif":
+                    return DRIT.Drawing.Text.FontFamily.GenericSerif;
+                case "monospace":
+                    return DRIT.Drawing.Text.FontFamily.GenericMonospace;
+                case "sans-serif":
+                case "sans serif":
+                case "system-ui":
+                    return DRIT.Drawing.Text.FontFamily.GenericSansSerif;
+                default:
+                    return new DRIT.Drawing.Text.FontFamily(first);
+            }
         }
 
         private static FontStyle ParseFontStyle(string fontStyle, string fontWeight)

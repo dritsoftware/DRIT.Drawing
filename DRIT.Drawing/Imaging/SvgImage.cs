@@ -2,7 +2,9 @@ using System;
 using System.IO;
 using DRIT.Drawing.Enums;
 using DRIT.Drawing.Geometry;
+using DRIT.Drawing.Metafile;
 using DRIT.Drawing.Vector;
+using DRIT.Drawing.Vector.Emf;
 using DRIT.Drawing.Vector.Svg;
 
 namespace DRIT.Drawing.Imaging
@@ -24,6 +26,25 @@ namespace DRIT.Drawing.Imaging
         public SvgImage(int width, int height)
         {
             _scene = new VectorScene { Width = width, Height = height };
+        }
+
+        /// <summary>
+        /// Initializes a new empty <see cref="SvgImage"/> with the specified
+        /// dimensions and resolution.
+        /// </summary>
+        /// <param name="width">The canvas width in pixels.</param>
+        /// <param name="height">The canvas height in pixels.</param>
+        /// <param name="dpiX">The horizontal resolution in dots per inch.</param>
+        /// <param name="dpiY">The vertical resolution in dots per inch.</param>
+        public SvgImage(int width, int height, float dpiX, float dpiY)
+        {
+            _scene = new VectorScene
+            {
+                Width = width,
+                Height = height,
+                DpiX = dpiX > 0 ? dpiX : 96f,
+                DpiY = dpiY > 0 ? dpiY : 96f,
+            };
         }
 
         /// <summary>
@@ -55,6 +76,25 @@ namespace DRIT.Drawing.Imaging
         /// </summary>
         internal VectorScene Scene => _scene;
 
+        /// <summary>
+        /// Gets or sets whether EMF output uses Excel-compatible logical path
+        /// coordinates: path points are written at sixteen times their effective
+        /// coordinates and bracketed by a 1/16 world transform.
+        /// </summary>
+        public bool UseExcelCompatibleEmfCoordinates { get; set; }
+
+        /// <summary>
+        /// Gets or sets the EMF output mode used when saving this image as EMF.
+        /// The Excel-compatible coordinate option always enables dual mode.
+        /// </summary>
+        public EmfOutputMode EmfOutputMode { get; set; } = EmfOutputMode.Classic;
+
+        /// <summary>
+        /// Gets or sets whether EMF output omits EMF+ comments and uses only
+        /// the classic EMF fallback records.
+        /// </summary>
+        public bool UseClassicEmfOutput { get; set; }
+
         /// <inheritdoc/>
         public override int Width => _scene.Width;
 
@@ -74,7 +114,7 @@ namespace DRIT.Drawing.Imaging
         /// <summary>
         /// Creates a <see cref="Graphics"/> surface for drawing onto this SVG
         /// image. Drawing operations are recorded as vector commands; no
-        /// rasterization occurs until <see cref="RenderToBitmap"/> is called.
+        /// rasterization occurs until <c>RenderToBitmap</c> is called.
         /// </summary>
         /// <returns>A <see cref="Graphics"/> backed by a <see cref="RecordingGraphics"/>.</returns>
         public Graphics CreateGraphics()
@@ -126,6 +166,23 @@ namespace DRIT.Drawing.Imaging
             Save(stream, ImageFormat.Svg);
         }
 
+        /// <summary>Saves this SVG using the specified SVG encoder parameters.</summary>
+        public void Save(string filename, SvgEncoderParameters parameters)
+        {
+            if (string.IsNullOrWhiteSpace(filename))
+                throw new ArgumentException("Filename cannot be null or whitespace.", nameof(filename));
+            using var stream = File.Open(filename, FileMode.Create, FileAccess.Write);
+            Save(stream, parameters);
+        }
+
+        /// <summary>Saves this SVG using the specified SVG encoder parameters.</summary>
+        public void Save(Stream stream, SvgEncoderParameters parameters)
+        {
+            if (stream == null) throw new ArgumentNullException(nameof(stream));
+            if (parameters == null) throw new ArgumentNullException(nameof(parameters));
+            SvgWriter.Write(stream, _scene, parameters);
+        }
+
         /// <inheritdoc/>
         public override void Save(string filename, ImageFormat format)
         {
@@ -144,6 +201,20 @@ namespace DRIT.Drawing.Imaging
             if (format.Equals(ImageFormat.Svg))
             {
                 SvgWriter.Write(stream, _scene, SvgEncoderParameters.Default);
+                return;
+            }
+
+            if (format.Equals(ImageFormat.Emf))
+            {
+                var outputMode = UseClassicEmfOutput
+                    ? EmfOutputMode.Classic
+                    : UseExcelCompatibleEmfCoordinates
+                    ? EmfOutputMode.EmfPlusDual
+                    : EmfOutputMode;
+                using var context = new EmfDrawingContext(Width, Height, _scene.DpiX, _scene.DpiY,
+                    UseExcelCompatibleEmfCoordinates ? 16f : 1f, outputMode);
+                VectorScenePlayer.Play(_scene, context);
+                new MetafileWriter().Write(context.ToDocument(), stream);
                 return;
             }
 
@@ -173,6 +244,9 @@ namespace DRIT.Drawing.Imaging
                 clone._scene.Commands.Add(cmd.Clone());
             clone._scene.DpiX = _scene.DpiX;
             clone._scene.DpiY = _scene.DpiY;
+            clone.UseExcelCompatibleEmfCoordinates = UseExcelCompatibleEmfCoordinates;
+            clone.EmfOutputMode = EmfOutputMode;
+            clone.UseClassicEmfOutput = UseClassicEmfOutput;
             return clone;
         }
 

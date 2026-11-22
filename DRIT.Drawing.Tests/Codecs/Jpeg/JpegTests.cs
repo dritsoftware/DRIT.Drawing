@@ -277,6 +277,28 @@ namespace DRIT.Drawing.Tests.Codecs.Jpeg
             Assert.AreEqual(0xFF, high);
         }
 
+        [TestMethod]
+        public void JpegReader_ReadEntropySegments_PreservesRestartBoundaries()
+        {
+            byte[] entropy =
+            {
+                0xA5, 0xFF, 0x00, 0xFF, 0xD0,
+                0x5A, 0xFF, 0xD1,
+                0xC0, 0xFF, 0xD9
+            };
+            var reader = new JpegReader(new MemoryStream(entropy));
+
+            var segments = reader.ReadEntropySegments();
+
+            Assert.AreEqual(3, segments.Count);
+            CollectionAssert.AreEqual(new byte[] { 0xA5, 0xFF }, segments[0]);
+            CollectionAssert.AreEqual(new byte[] { 0x5A }, segments[1]);
+            CollectionAssert.AreEqual(new byte[] { 0xC0 }, segments[2]);
+
+            var (marker, _) = reader.ReadMarker();
+            Assert.AreEqual(JpegMarker.EOI, marker);
+        }
+
         // ─────────────────────────────────────────────────────────────────────
         // JPEG
         // ─────────────────────────────────────────────────────────────────────

@@ -21,7 +21,20 @@ namespace DRIT.Drawing.Codecs.Jpeg
             if (targetWidth <= 0 || targetHeight <= 0)
                 throw new ArgumentOutOfRangeException(nameof(targetWidth));
 
-            var upsampled = new byte[targetWidth * targetHeight];
+            var upsampled = new byte[checked(targetWidth * targetHeight)];
+
+            // Column map computed once instead of two divisions per pixel.
+            bool identityColumns = horizontalSampling == maxHorizontalSampling && sourceWidth >= targetWidth;
+            int[]? columns = null;
+            if (!identityColumns)
+            {
+                columns = new int[targetWidth];
+                for (int x = 0; x < targetWidth; x++)
+                {
+                    int sx = (x * horizontalSampling) / maxHorizontalSampling;
+                    columns[x] = sx >= sourceWidth ? sourceWidth - 1 : sx;
+                }
+            }
 
             for (int y = 0; y < targetHeight; y++)
             {
@@ -30,12 +43,14 @@ namespace DRIT.Drawing.Codecs.Jpeg
 
                 int dstRow = y * targetWidth;
                 int srcRow = sy * sourceWidth;
-                for (int x = 0; x < targetWidth; x++)
+                if (identityColumns)
                 {
-                    int sx = (x * horizontalSampling) / maxHorizontalSampling;
-                    if (sx >= sourceWidth) sx = sourceWidth - 1;
-                    upsampled[dstRow + x] = source[srcRow + sx];
+                    Buffer.BlockCopy(source, srcRow, upsampled, dstRow, targetWidth);
+                    continue;
                 }
+
+                for (int x = 0; x < targetWidth; x++)
+                    upsampled[dstRow + x] = source[srcRow + columns![x]];
             }
 
             return upsampled;

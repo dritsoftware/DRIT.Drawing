@@ -8,6 +8,13 @@ namespace DRIT.Drawing.Imaging
     public sealed class PropertyItem
     {
         /// <summary>
+        /// Initializes a empty <see cref="PropertyItem"/> instance.
+        /// </summary>
+        public PropertyItem()
+        {
+        }
+
+        /// <summary>
         /// Gets or sets the property identifier.
         /// </summary>
         public int    Id    { get; set; }

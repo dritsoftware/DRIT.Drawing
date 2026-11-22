@@ -22,15 +22,20 @@ namespace DRIT.Drawing.Imaging
         // LockBits support
         private GCHandle _lockHandle;
         private bool     _locked;
+        private byte[]?  _convertedLock;        // converted copy handed out by a lock in a different format
+        private Rectangle _convertedLockRect;
+        private PixelFormat _convertedLockFormat;
+        private bool     _convertedLockWritable;
+        private int      _convertedLockStride;
 
-        // Multi-frame (animation) support — APNG, animated GIF.
+        // Multi-frame (animation) support â€” APNG, animated GIF.
         private List<AnimationFrame>? _frames;
         private FrameAnimator?        _animator;
         private byte[]?               _defaultPixels;
         private int                   _activeFrame = -1;
         private int                   _loopCount;
 
-        // ── Constructors ────────────────────────────────────────────────────────
+        // â”€â”€ Constructors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>
         /// Initializes a new <see cref="Bitmap"/> with the specified width and height.
@@ -54,7 +59,7 @@ namespace DRIT.Drawing.Imaging
             _height = height;
             _format = format;
             _stride = CalcStride(width, format);
-            _pixels = new byte[_height * _stride];
+            _pixels = new byte[PixelBufferLength(height, _stride)];
         }
 
         /// <summary>
@@ -73,7 +78,7 @@ namespace DRIT.Drawing.Imaging
             _height = height;
             _stride = stride;
             _format = format;
-            _pixels = new byte[Math.Abs(stride) * height];
+            _pixels = new byte[PixelBufferLength(height, Math.Abs(stride))];
             Marshal.Copy(scan0, _pixels, 0, _pixels.Length);
         }
 
@@ -101,6 +106,35 @@ namespace DRIT.Drawing.Imaging
         }
 
         /// <summary>
+        /// Initializes a new <see cref="Bitmap"/> from the specified stream, enforcing
+        /// <paramref name="limits"/> instead of <see cref="ImageDecodeLimits.Default"/>.
+        /// </summary>
+        /// <param name="stream">The stream to load from.</param>
+        /// <param name="limits">The resource limits for this decode.</param>
+        public Bitmap(Stream stream, ImageDecodeLimits limits)
+        {
+            if (limits == null) throw new ArgumentNullException(nameof(limits));
+            var loaded = Codecs.CodecRegistry.Decode(stream, limits);
+            CopyLoaded(loaded);
+        }
+
+        /// <summary>
+        /// Initializes a new <see cref="Bitmap"/> from the specified file, enforcing
+        /// <paramref name="limits"/> instead of <see cref="ImageDecodeLimits.Default"/>.
+        /// </summary>
+        /// <param name="filename">The file to load from.</param>
+        /// <param name="limits">The resource limits for this decode.</param>
+        public Bitmap(string filename, ImageDecodeLimits limits)
+        {
+            if (limits == null) throw new ArgumentNullException(nameof(limits));
+            using (var fs = File.OpenRead(filename))
+            {
+                var loaded = Codecs.CodecRegistry.Decode(fs, limits);
+                CopyLoaded(loaded);
+            }
+        }
+
+        /// <summary>
         /// Initializes a new <see cref="Bitmap"/> as a copy of an existing image.
         /// </summary>
         /// <param name="original">The image to copy from.</param>
@@ -111,7 +145,7 @@ namespace DRIT.Drawing.Imaging
             _height = original.Height;
             _format = PixelFormat.Format32bppArgb;
             _stride = CalcStride(_width, _format);
-            _pixels = new byte[_height * _stride];
+            _pixels = new byte[PixelBufferLength(_height, _stride)];
             _dpiX   = original.HorizontalResolution;
             _dpiY   = original.VerticalResolution;
 
@@ -129,7 +163,7 @@ namespace DRIT.Drawing.Imaging
         // Private constructor used by Clone/Load helpers
         private Bitmap() { _pixels = Array.Empty<byte>(); }
 
-        // ── Properties ──────────────────────────────────────────────────────────
+        // â”€â”€ Properties â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>
         /// Gets the width of this bitmap in pixels.
@@ -157,7 +191,7 @@ namespace DRIT.Drawing.Imaging
         public override int         Flags
             => (int)(ImageFlags.ColorSpaceRgb | ImageFlags.HasRealDpi | ImageFlags.HasRealPixelSize);
 
-        // ── Multi-frame (animation) ──────────────────────────────────────────────
+        // â”€â”€ Multi-frame (animation) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         internal void SetAnimationFrames(List<AnimationFrame> frames, int loopCount)
         {
@@ -172,12 +206,18 @@ namespace DRIT.Drawing.Imaging
 
         internal int GetAnimationLoopCount() => _loopCount;
 
+        /// <summary>
+        /// Returns the number of frames available in the specified animation dimension.
+        /// </summary>
         public override int GetFrameCount(FrameDimension dimension)
         {
             if (dimension != null && dimension.Equals(FrameDimension.Time) && _frames != null)
                 return _frames.Count;
             return 1;
         }
+/// <summary>
+/// Selects the active frame in the specified animation dimension.
+/// </summary>
 
         public override int SelectActiveFrame(FrameDimension dimension, int idx)
         {
@@ -202,7 +242,7 @@ namespace DRIT.Drawing.Imaging
             return previous < 0 ? 0 : previous;
         }
 
-        // ── Pixel access ─────────────────────────────────────────────────────────
+        // â”€â”€ Pixel access â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>
         /// Gets the color of the pixel at the specified coordinates.
@@ -300,7 +340,7 @@ namespace DRIT.Drawing.Imaging
             }
         }
 
-        // ── LockBits / UnlockBits ───────────────────────────────────────────────
+        // â”€â”€ LockBits / UnlockBits â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>
         /// Locks a rectangular region of the bitmap for pixel access.
@@ -328,6 +368,11 @@ namespace DRIT.Drawing.Imaging
             {
                 // Convert to requested format
                 buffer = ConvertRegion(rect, format, out stride);
+                _convertedLock = buffer;
+                _convertedLockRect = rect;
+                _convertedLockFormat = format;
+                _convertedLockWritable = ((int)flags & (int)ImageLockMode.WriteOnly) != 0;
+                _convertedLockStride = stride;
             }
 
             _lockHandle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
@@ -368,9 +413,15 @@ namespace DRIT.Drawing.Imaging
             if (_lockHandle.IsAllocated)
                 _lockHandle.Free();
             _locked = false;
+
+            // A lock in another format worked on a converted copy; for write access the changes go back now.
+            byte[]? converted = _convertedLock;
+            _convertedLock = null;
+            if (converted != null && _convertedLockWritable)
+                WriteBackConvertedRegion(converted);
         }
 
-        // ── Transparency ────────────────────────────────────────────────────────
+        // â”€â”€ Transparency â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>
         /// Makes the default color transparent for this bitmap.
@@ -403,13 +454,36 @@ namespace DRIT.Drawing.Imaging
             }
         }
 
-        // ── Clone ────────────────────────────────────────────────────────────────
+        // â”€â”€ Clone â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>
         /// Creates an exact copy of this <see cref="Bitmap"/>.
         /// </summary>
         /// <returns>A new <see cref="Bitmap"/> with the same pixel data.</returns>
-        public override Image Clone() => Clone(new Rectangle(0, 0, _width, _height), _format);
+        public override Image Clone()
+        {
+            // A full clone is an exact copy: pixel format, raw format, resolution and animation included.
+            var copy = new Bitmap
+            {
+                _width = _width,
+                _height = _height,
+                _stride = _stride,
+                _format = _format,
+                _pixels = (byte[])_pixels.Clone(),
+                _rawFormat = _rawFormat,
+                _dpiX = _dpiX,
+                _dpiY = _dpiY,
+            };
+            if (_frames != null && _animator != null)
+            {
+                copy._frames = _frames;
+                copy._loopCount = _loopCount;
+                copy._animator = new FrameAnimator(_width, _height, _frames);
+                copy._defaultPixels = _defaultPixels == null ? null : (byte[])_defaultPixels.Clone();
+                copy._activeFrame = _activeFrame;
+            }
+            return copy;
+        }
 
         /// <summary>
         /// Creates a copy of the specified region of this <see cref="Bitmap"/> in the specified format.
@@ -423,6 +497,7 @@ namespace DRIT.Drawing.Imaging
             var dst = new Bitmap(rect.Width, rect.Height, format);
             dst._dpiX = _dpiX;
             dst._dpiY = _dpiY;
+            dst._rawFormat = _rawFormat;
             int srcBpp = GetBytesPerPixel(_format);
             int dstBpp = GetBytesPerPixel(format);
             for (int y = 0; y < rect.Height; y++)
@@ -434,7 +509,7 @@ namespace DRIT.Drawing.Imaging
             return dst;
         }
 
-        // ── RotateFlip ──────────────────────────────────────────────────────────
+        // â”€â”€ RotateFlip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>
         /// Rotates and flips the bitmap.
@@ -442,7 +517,7 @@ namespace DRIT.Drawing.Imaging
         /// <param name="rft">The rotation and flip type.</param>
         public override void RotateFlip(RotateFlipType rft)
         {
-            int rotations = (int)rft & 3;   // 0–3 × 90° CW
+            int rotations = (int)rft & 3;   // 0â€“3 Ă— 90Â° CW
             bool flipX   = ((int)rft & 4) != 0;
 
             for (int i = 0; i < rotations; i++)
@@ -451,7 +526,7 @@ namespace DRIT.Drawing.Imaging
                 FlipHorizontal();
         }
 
-        // ── Save ─────────────────────────────────────────────────────────────────
+        // â”€â”€ Save â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>
         /// Saves this bitmap to the specified file.
@@ -506,7 +581,7 @@ namespace DRIT.Drawing.Imaging
             Codecs.CodecRegistry.Encode(this, stream, format ?? ImageFormat.Bmp, encoderParams);
         }
 
-        // ── GetHbitmap ───────────────────────────────────────────────────────────
+        // â”€â”€ GetHbitmap â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>
         /// Returns a handle to this bitmap.
@@ -525,7 +600,7 @@ namespace DRIT.Drawing.Imaging
         public IntPtr GetHbitmap(Color background)
             => GetHbitmap();
 
-        // ── Static factory ───────────────────────────────────────────────────────
+        // â”€â”€ Static factory â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>
         /// Creates a <see cref="Bitmap"/> from the specified file.
@@ -543,7 +618,25 @@ namespace DRIT.Drawing.Imaging
         public static new Bitmap FromStream(Stream stream)
             => new Bitmap(stream);
 
-        // ── IDisposable ──────────────────────────────────────────────────────────
+        /// <summary>
+        /// Creates a <see cref="Bitmap"/> from the specified file, enforcing <paramref name="limits"/>.
+        /// </summary>
+        /// <param name="filename">The file to load from.</param>
+        /// <param name="limits">The resource limits for this decode.</param>
+        /// <returns>The loaded bitmap.</returns>
+        public static new Bitmap FromFile(string filename, ImageDecodeLimits limits)
+            => new Bitmap(filename, limits);
+
+        /// <summary>
+        /// Creates a <see cref="Bitmap"/> from the specified stream, enforcing <paramref name="limits"/>.
+        /// </summary>
+        /// <param name="stream">The stream to load from.</param>
+        /// <param name="limits">The resource limits for this decode.</param>
+        /// <returns>The loaded bitmap.</returns>
+        public static new Bitmap FromStream(Stream stream, ImageDecodeLimits limits)
+            => new Bitmap(stream, limits);
+
+        // â”€â”€ IDisposable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>
         /// Releases the unmanaged resources used by this bitmap and optionally releases the managed resources.
@@ -558,14 +651,26 @@ namespace DRIT.Drawing.Imaging
             base.Dispose(disposing);
         }
 
-        // ═══════════════════════════════════════════════════════════════════════
+        // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
         // Private helpers
-        // ═══════════════════════════════════════════════════════════════════════
+        // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
         internal static int CalcStride(int width, PixelFormat format)
         {
             int bits = GetBitsPerPixel(format);
-            return ((width * bits + 31) / 32) * 4;
+            long stride = (((long)width * bits + 31) / 32) * 4;
+            if (stride > int.MaxValue)
+                throw new ArgumentOutOfRangeException(nameof(width), "The bitmap is too wide.");
+            return (int)stride;
+        }
+
+        /// <summary>Size of a pixel buffer, refusing bitmaps that would not fit in one managed array.</summary>
+        private static int PixelBufferLength(int height, int stride)
+        {
+            long length = (long)height * stride;
+            if (length > int.MaxValue)
+                throw new ArgumentOutOfRangeException(nameof(height), "The bitmap would exceed the maximum buffer size.");
+            return (int)length;
         }
 
         private void CopyLoaded(Bitmap loaded)
@@ -658,21 +763,74 @@ namespace DRIT.Drawing.Imaging
 
         private byte[] ConvertRegion(Rectangle rect, PixelFormat format, out int stride)
         {
+            // Only formats that GetPixel/SetPixel can round-trip are offered; anything else used to hand back a
+            // silently zeroed buffer.
+            if (format != PixelFormat.Format32bppArgb && format != PixelFormat.Format32bppRgb
+                && format != PixelFormat.Format32bppPArgb && format != PixelFormat.Format24bppRgb)
+                throw new NotSupportedException($"Locking a {_format} bitmap as {format} is not supported.");
+
             stride = CalcStride(rect.Width, format);
-            var buf = new byte[rect.Height * stride];
+            var buf = new byte[PixelBufferLength(rect.Height, stride)];
             int dstBpp = GetBytesPerPixel(format);
             for (int y = 0; y < rect.Height; y++)
             for (int x = 0; x < rect.Width;  x++)
             {
                 var c = GetPixel(rect.X + x, rect.Y + y);
                 int off = y * stride + x * dstBpp;
-                if (dstBpp >= 4) { buf[off]=c.B; buf[off+1]=c.G; buf[off+2]=c.R; buf[off+3]=c.A; }
-                else if (dstBpp == 3) { buf[off]=c.B; buf[off+1]=c.G; buf[off+2]=c.R; }
+                switch (format)
+                {
+                    case PixelFormat.Format32bppArgb:
+                        buf[off] = c.B; buf[off + 1] = c.G; buf[off + 2] = c.R; buf[off + 3] = c.A;
+                        break;
+                    case PixelFormat.Format32bppRgb:
+                        buf[off] = c.B; buf[off + 1] = c.G; buf[off + 2] = c.R; buf[off + 3] = 255;
+                        break;
+                    case PixelFormat.Format32bppPArgb:
+                        buf[off]     = (byte)((c.B * c.A + 127) / 255);
+                        buf[off + 1] = (byte)((c.G * c.A + 127) / 255);
+                        buf[off + 2] = (byte)((c.R * c.A + 127) / 255);
+                        buf[off + 3] = c.A;
+                        break;
+                    default:
+                        buf[off] = c.B; buf[off + 1] = c.G; buf[off + 2] = c.R;
+                        break;
+                }
             }
             return buf;
         }
 
-        // ── Rotate 90° clockwise ─────────────────────────────────────────────────
+        // Copies a converted lock buffer back into the bitmap (the inverse of ConvertRegion).
+        private void WriteBackConvertedRegion(byte[] buf)
+        {
+            Rectangle rect = _convertedLockRect;
+            PixelFormat format = _convertedLockFormat;
+            int stride = _convertedLockStride;
+            int bpp = GetBytesPerPixel(format);
+            for (int y = 0; y < rect.Height; y++)
+            for (int x = 0; x < rect.Width;  x++)
+            {
+                int off = y * stride + x * bpp;
+                int b = buf[off], g = buf[off + 1], r = buf[off + 2], a = 255;
+                if (format == PixelFormat.Format32bppArgb)
+                {
+                    a = buf[off + 3];
+                }
+                else if (format == PixelFormat.Format32bppPArgb)
+                {
+                    a = buf[off + 3];
+                    if (a == 0) { r = g = b = 0; }
+                    else
+                    {
+                        r = Math.Min(255, (r * 255 + a / 2) / a);
+                        g = Math.Min(255, (g * 255 + a / 2) / a);
+                        b = Math.Min(255, (b * 255 + a / 2) / a);
+                    }
+                }
+                SetPixel(rect.X + x, rect.Y + y, Color.FromArgb(a, r, g, b));
+            }
+        }
+
+        // â”€â”€ Rotate 90Â° clockwise â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private void Rotate90CW()
         {
@@ -698,7 +856,7 @@ namespace DRIT.Drawing.Imaging
             (_width, _height) = (newW, newH);
         }
 
-        // ── Flip horizontally (mirror left-right) ────────────────────────────────
+        // â”€â”€ Flip horizontally (mirror left-right) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private void FlipHorizontal()
         {

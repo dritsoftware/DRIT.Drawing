@@ -38,29 +38,38 @@ namespace DRIT.Drawing.Rendering
             private readonly Rectangle _logical;
             private readonly float _scaleX;
             private readonly float _scaleY;
+            private readonly bool _invertY;
 
-            public Viewport(Rectangle logicalBounds, int pixelWidth, int pixelHeight)
+            public Viewport(Rectangle logicalBounds, int pixelWidth, int pixelHeight, bool invertY)
             {
                 _logical = logicalBounds;
                 int logicalWidth = Math.Max(1, logicalBounds.Width);
                 int logicalHeight = Math.Max(1, logicalBounds.Height);
                 _scaleX = pixelWidth / (float)logicalWidth;
                 _scaleY = pixelHeight / (float)logicalHeight;
+                _invertY = invertY;
             }
 
             public PointF MapPoint(float x, float y)
             {
+                float mappedY = _invertY
+                    ? (_logical.Y + _logical.Height - y) * _scaleY
+                    : (y - _logical.Y) * _scaleY;
                 return new PointF(
                     (x - _logical.X) * _scaleX,
-                    (y - _logical.Y) * _scaleY);
+                    mappedY);
             }
 
             public RectangleF MapRect(float left, float top, float right, float bottom)
             {
                 float x1 = (left - _logical.X) * _scaleX;
-                float y1 = (top - _logical.Y) * _scaleY;
                 float x2 = (right - _logical.X) * _scaleX;
-                float y2 = (bottom - _logical.Y) * _scaleY;
+                float y1 = _invertY
+                    ? (_logical.Y + _logical.Height - top) * _scaleY
+                    : (top - _logical.Y) * _scaleY;
+                float y2 = _invertY
+                    ? (_logical.Y + _logical.Height - bottom) * _scaleY
+                    : (bottom - _logical.Y) * _scaleY;
 
                 float minX = Math.Min(x1, x2);
                 float minY = Math.Min(y1, y2);
@@ -86,7 +95,11 @@ namespace DRIT.Drawing.Rendering
             if (ctx == null)
                 throw new ArgumentNullException(nameof(ctx));
 
-            var viewport = new Viewport(logicalBounds, ctx.Width, ctx.Height);
+            var viewport = new Viewport(
+                logicalBounds,
+                ctx.Width,
+                ctx.Height,
+                document.InvertWmfYAxis);
             var objects = new List<object?>();
 
             var currentPoint = new PointF(0f, 0f);

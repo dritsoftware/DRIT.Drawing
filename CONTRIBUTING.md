@@ -4,7 +4,7 @@ Thank you for your interest in contributing to DRIT.Drawing! This document cover
 
 ## Development Model
 
-DRIT.Drawing is developed internally in Azure DevOps. The public GitHub repository is a filtered mirror that is synced monthly. Contributions via pull requests on GitHub are welcome and will be reviewed for inclusion in the next monthly sync.
+DRIT.Drawing is developed internally in Azure DevOps. The public GitHub repository receives filtered source releases. Contributions via pull requests on GitHub are welcome and will be reviewed for inclusion in a future update.
 
 ## How to Contribute
 
@@ -25,7 +25,7 @@ DRIT.Drawing is developed internally in Azure DevOps. The public GitHub reposito
 
 1. Fork the repository and create a feature branch from `main`.
 2. Keep changes focused — one feature or fix per PR.
-3. Follow the existing code style. The project uses StyleCop analyzers; warnings will fail the build.
+3. Follow the existing code style.
 4. Add or update unit tests in `DRIT.Drawing.Tests/` to cover your changes.
 5. Ensure all tests pass:
    ```bash
@@ -51,6 +51,7 @@ DRIT.Drawing is developed internally in Azure DevOps. The public GitHub reposito
 | `DRIT.Drawing/` | Core library — graphics, image codecs, font engine, vector model, metafile. |
 | `DRIT.Drawing.Tests/` | Unit tests. |
 | `DRIT.Drawing.IntegrationTests/` | Integration tests. |
+| `DRIT.Drawing.Examples/` | Runnable examples used by the documentation. |
 
 ## License
 

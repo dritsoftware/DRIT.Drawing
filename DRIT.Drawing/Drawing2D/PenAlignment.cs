@@ -1,7 +1,7 @@
 namespace DRIT.Drawing.Drawing2D
 {
     /// <summary>
-    /// Specifies the alignment of a <see cref="Pen"/> relative to the stroke outline.
+    /// Specifies the alignment of a <see cref="DRIT.Drawing.Pens.Pen"/> relative to the stroke outline.
     /// </summary>
     public enum PenAlignment
     {

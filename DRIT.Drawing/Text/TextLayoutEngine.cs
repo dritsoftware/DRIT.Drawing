@@ -175,6 +175,7 @@ namespace DRIT.Drawing.Text
             float[] tabStops = sf.GetTabStops(out firstTabOffset);
             bool noWrap = (sf.FormatFlags & StringFormatFlags.NoWrap) != 0;
             float maxW = layoutRect.Width > 0f ? layoutRect.Width : float.MaxValue;
+            bool hasFirstLineIndent = Math.Abs(sf.FirstLineIndent) > 0.001f;
 
             var lines = new List<TextLine>();
 
@@ -216,6 +217,7 @@ namespace DRIT.Drawing.Text
 
             foreach (var para in paragraphs)
             {
+                int paragraphLineStart = lines.Count;
                 if (para.Count == 0)
                 {
                     var rd0 = runData[0];
@@ -224,7 +226,8 @@ namespace DRIT.Drawing.Text
                         Width = 0,
                         LineHeight = rd0.Ascent + rd0.Descent + rd0.LineGap,
                         Ascent = rd0.Ascent,
-                        Descent = rd0.Descent
+                        Descent = rd0.Descent,
+                        IsLastLineOfParagraph = true
                     });
                     continue;
                 }
@@ -238,13 +241,21 @@ namespace DRIT.Drawing.Text
                 int start = 0;
                 while (start < para.Count)
                 {
-                    int end = FindLineEndMulti(para, start, maxW);
+                    int end = start == 0 && hasFirstLineIndent
+                        ? FindLineEndMulti(para, start,
+                            maxW - Math.Max(0, sf.FirstLineIndent))
+                        : FindLineEndMulti(para, start, maxW);
                     var lineChars = para.GetRange(start, end - start);
                     if (end < para.Count && para[end].Item3 == ' ')
                         end++;
                     AddLineFromFlat(lineChars, runs, runData, firstTabOffset, tabStops, lines);
                     start = end;
                 }
+
+                for (int lineIndex = paragraphLineStart; lineIndex < lines.Count - 1; lineIndex++)
+                    lines[lineIndex].IsLastLineOfParagraph = false;
+                if (lines.Count > paragraphLineStart)
+                    lines[lines.Count - 1].IsLastLineOfParagraph = true;
             }
 
             if (lines.Count == 0)
@@ -301,21 +312,35 @@ namespace DRIT.Drawing.Text
             }
 
             bool paragraphRTL = (sf.FormatFlags & StringFormatFlags.DirectionRightToLeft) != 0;
+            int paragraphLineIndex = 0;
             foreach (var line in lines)
             {
+                line.TokenizeNativeText = sf.Alignment == StringAlignment.Justify ||
+                    sf.Alignment == StringAlignment.Distributed;
+                float lineIndent = hasFirstLineIndent && paragraphLineIndex == 0
+                    ? sf.FirstLineIndent
+                    : 0;
                 float lineX;
+                bool expandSpaces = sf.Alignment == StringAlignment.Distributed ||
+                    (sf.Alignment == StringAlignment.Justify && !line.IsLastLineOfParagraph);
+                if (expandSpaces)
+                    ApplySpacingExpansion(line, layoutRect.Width - lineIndent,
+                        sf.Alignment == StringAlignment.Distributed);
+
                 if (paragraphRTL)
                 {
                     switch (sf.Alignment)
                     {
                         case StringAlignment.Center:
-                            lineX = layoutRect.X + (layoutRect.Width - line.Width) / 2f;
+                            lineX = layoutRect.X + lineIndent +
+                                (layoutRect.Width - lineIndent - line.Width) / 2f;
                             break;
                         case StringAlignment.Far:
-                            lineX = layoutRect.X;
+                            lineX = layoutRect.X + lineIndent;
                             break;
                         default:
-                            lineX = layoutRect.X + layoutRect.Width - line.Width;
+                            lineX = layoutRect.X + lineIndent +
+                                layoutRect.Width - lineIndent - line.Width;
                             break;
                     }
                 }
@@ -324,13 +349,15 @@ namespace DRIT.Drawing.Text
                     switch (sf.Alignment)
                     {
                         case StringAlignment.Center:
-                            lineX = layoutRect.X + (layoutRect.Width - line.Width) / 2f;
+                            lineX = layoutRect.X + lineIndent +
+                                (layoutRect.Width - lineIndent - line.Width) / 2f;
                             break;
                         case StringAlignment.Far:
-                            lineX = layoutRect.X + layoutRect.Width - line.Width;
+                            lineX = layoutRect.X + lineIndent +
+                                layoutRect.Width - lineIndent - line.Width;
                             break;
                         default:
-                            lineX = layoutRect.X;
+                            lineX = layoutRect.X + lineIndent;
                             break;
                     }
                 }
@@ -341,9 +368,43 @@ namespace DRIT.Drawing.Text
                     run.X = curX;
                     curX += run.Width;
                 }
+                if (line.IsLastLineOfParagraph)
+                    paragraphLineIndex = 0;
+                else
+                    paragraphLineIndex++;
             }
 
             return lines;
+        }
+
+        private static void ApplySpacingExpansion(TextLine line, float layoutWidth,
+                               bool distributeCharacters)
+        {
+            if (line.Width >= layoutWidth || line.Runs.Count == 0)
+                return;
+
+            int characterCount = 0;
+            int spaceCount = 0;
+            foreach (var run in line.Runs)
+            {
+                foreach (char c in run.Text)
+                {
+                    characterCount++;
+                    if (c == ' ') spaceCount++;
+                }
+            }
+
+            float extra = layoutWidth - line.Width;
+            if (distributeCharacters && characterCount > 1)
+            {
+                line.ExtraCharacterSpacing = extra / (characterCount - 1);
+            }
+            else if (spaceCount > 0)
+            {
+                line.ExtraSpaceSpacing = extra / spaceCount;
+            }
+
+            line.Width = layoutWidth;
         }
 
         private struct RunMetrics

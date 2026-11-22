@@ -22,15 +22,21 @@ namespace DRIT.Drawing.Codecs
 
         // ─── Decode ──────────────────────────────────────────────────────────────
 
-        public static Bitmap Decode(Stream stream)
+        public static Bitmap Decode(Stream stream, ImageDecodeLimits? limits = null)
+        {
+            if (stream == null) throw new ArgumentNullException(nameof(stream));
+            using (CodecValidation.Scope(limits))
+                return DecodeWithCurrentLimits(stream);
+        }
+
+        private static Bitmap DecodeWithCurrentLimits(Stream stream)
         {
             // Ensure seekable
             Stream seekable;
             bool   ownStream = false;
             if (!stream.CanSeek)
             {
-                var ms = new MemoryStream();
-                stream.CopyTo(ms);
+                var ms = new MemoryStream(CodecValidation.ReadAll(stream, "image"));
                 ms.Position = 0;
                 seekable  = ms;
                 ownStream = true;
@@ -42,14 +48,24 @@ namespace DRIT.Drawing.Codecs
 
             try
             {
+                // A single Read may legitimately return fewer bytes than asked for.
                 var header = new byte[12];
-                int n = seekable.Read(header, 0, 12);
+                int n = 0;
+                while (n < header.Length)
+                {
+                    int read = seekable.Read(header, n, header.Length - n);
+                    if (read <= 0)
+                        break;
+                    n += read;
+                }
+                if (n == 0)
+                    throw new InvalidDataException("The stream contains no image data.");
                 seekable.Seek(-n, SeekOrigin.Current);
 
                 foreach (var codec in Codecs)
                 {
                     if (codec.CanDecode(header))
-                        return codec.Decode(seekable);
+                        return DecodeWithCodec(codec, seekable);
                 }
 
                 throw new NotSupportedException("Unknown or unsupported image format.");
@@ -57,6 +73,29 @@ namespace DRIT.Drawing.Codecs
             finally
             {
                 if (ownStream) seekable.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Runs a decoder and reports every kind of "the bytes do not describe a valid image" as
+        /// <see cref="InvalidDataException"/>: a decoder that trips over truncated or inconsistent input with an
+        /// end-of-stream, index, overflow or argument exception must not leak that detail to callers.
+        /// <see cref="NotSupportedException"/> (valid but unsupported) and out-of-memory conditions pass through.
+        /// </summary>
+        private static Bitmap DecodeWithCodec(IImageCodec codec, Stream stream)
+        {
+            try
+            {
+                return codec.Decode(stream);
+            }
+            catch (Exception ex) when (ex is EndOfStreamException
+                || ex is IndexOutOfRangeException
+                || ex is OverflowException
+                || ex is DivideByZeroException
+                || ex is FormatException
+                || (ex is ArgumentException && !(ex is ArgumentNullException)))
+            {
+                throw new InvalidDataException("The image data is malformed: " + ex.Message, ex);
             }
         }
 

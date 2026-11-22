@@ -7,6 +7,13 @@ namespace DRIT.Drawing.Font.Cff
     public sealed class CffPrivateDict
     {
         /// <summary>
+        /// Initializes a empty <see cref="CffPrivateDict"/> instance.
+        /// </summary>
+        public CffPrivateDict()
+        {
+        }
+
+        /// <summary>
         /// Width used when no explicit width is encoded in the charstring.
         /// Corresponds to the CFF <c>defaultWidthX</c> entry (key 20).
         /// </summary>

@@ -10,6 +10,13 @@ namespace DRIT.Drawing.Drawing2D
     /// </summary>
     public sealed class ImageAttributes : IDisposable
     {
+        /// <summary>
+        /// Initializes an empty <see cref="ImageAttributes"/> instance.
+        /// </summary>
+        public ImageAttributes()
+        {
+        }
+
         // Per-type slots: Bitmap (type=1) takes priority over Default (type=0)
         private ColorMatrix?  _bitmapColorMatrix;
         private ColorMatrix?  _defaultColorMatrix;

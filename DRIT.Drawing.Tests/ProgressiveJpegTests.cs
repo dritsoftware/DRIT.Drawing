@@ -65,5 +65,8 @@ namespace DRIT.Drawing.Tests
                 }
             }
         }
+
+        // The Issue #1 fixture is verified pixel-wise against libjpeg in
+        // Codecs/Jpeg/JpegCompatibilityTests.ProgressiveJpeg_Issue1Flowers_MatchesReferenceDecoder.
     }
 }

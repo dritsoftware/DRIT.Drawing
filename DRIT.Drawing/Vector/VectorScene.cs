@@ -10,6 +10,13 @@ namespace DRIT.Drawing.Vector
     public sealed class VectorScene
     {
         /// <summary>
+        /// Initializes a empty <see cref="VectorScene"/> instance.
+        /// </summary>
+        public VectorScene()
+        {
+        }
+
+        /// <summary>
         /// Gets or sets the canvas width in pixels.
         /// </summary>
         public int Width { get; set; }

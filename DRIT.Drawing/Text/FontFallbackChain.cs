@@ -65,6 +65,7 @@ namespace DRIT.Drawing.Text
                 {
                     "Segoe UI", "Segoe UI Symbol", "Segoe UI Emoji",
                     "Segoe UI Historic", "Tahoma", "Arial Unicode MS",
+                    "Microsoft YaHei", "Microsoft JhengHei", "SimSun", "NSimSun",
                     "Arial", "Times New Roman"
                 };
             }

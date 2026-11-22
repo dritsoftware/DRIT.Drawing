@@ -1,7 +1,7 @@
 namespace DRIT.Drawing.Drawing2D
 {
     /// <summary>
-    /// Specifies the dash cap style for lines drawn with a <see cref="Pen"/>.
+    /// Specifies the dash cap style for lines drawn with a <see cref="DRIT.Drawing.Pens.Pen"/>.
     /// </summary>
     public enum DashCap
     {

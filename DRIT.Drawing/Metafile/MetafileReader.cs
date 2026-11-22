@@ -14,6 +14,13 @@ namespace DRIT.Drawing.Metafile
     /// </summary>
     public class MetafileReader
     {
+        /// <summary>
+        /// Initializes a empty <see cref="MetafileReader"/> instance.
+        /// </summary>
+        public MetafileReader()
+        {
+        }
+
         private const uint WmfPlaceableKey = 0x9AC6CDD7;
 
         private const uint EmfSignature = 0x464D4520;
@@ -189,6 +196,7 @@ namespace DRIT.Drawing.Metafile
                 WmfHeader = wmfReader.Header,
                 WmfRecords = wmfReader.Records,
                 PlaceableHeader = placeableHeader,
+                InvertWmfYAxis = placeableHeader != null && placeableHeader.Reserved == 0x44524954,
             };
         }
 
@@ -341,7 +349,7 @@ namespace DRIT.Drawing.Metafile
                 }
 
                 using var commentStream = new MemoryStream(commentRecord.CommentData, writable: false);
-                if (!LooksLikeEmfPlus(commentStream))
+                if (!LooksLikeEmbeddedEmfPlus(commentRecord.CommentData))
                 {
                     continue;
                 }
@@ -363,6 +371,25 @@ namespace DRIT.Drawing.Metafile
             }
 
             return embeddedRecords;
+        }
+
+        private static bool LooksLikeEmbeddedEmfPlus(byte[] payload)
+        {
+            if (payload == null || payload.Length < 16)
+            {
+                return false;
+            }
+
+            using var stream = new MemoryStream(payload, writable: false);
+            using var reader = new BinaryReader(stream, System.Text.Encoding.Default, leaveOpen: true);
+            if (reader.ReadUInt32() != EmfPlusCommentIdentifier)
+            {
+                return false;
+            }
+
+            ushort recordType = reader.ReadUInt16();
+            return recordType >= (ushort)Metafile.EmfPlus.Enumerations.RecordType.EmfPlusHeader
+                && recordType <= (ushort)Metafile.EmfPlus.Enumerations.RecordType.EmfPlusSetTSClip;
         }
     }
 }

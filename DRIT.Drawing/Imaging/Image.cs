@@ -14,6 +14,13 @@ namespace DRIT.Drawing.Imaging
     /// </summary>
     public abstract class Image : IDisposable
     {
+        /// <summary>
+        /// Initializes an empty <see cref="Image"/> instance.
+        /// </summary>
+        protected Image()
+        {
+        }
+
         // Resolution (pixels per inch); subclasses may override.
         internal float _dpiX = 96f;
         internal float _dpiY = 96f;
@@ -202,11 +209,29 @@ namespace DRIT.Drawing.Imaging
         public static Image FromFile(string filename)   => Bitmap.FromFile(filename);
 
         /// <summary>
+        /// Creates an <see cref="Image"/> from the specified file, enforcing <paramref name="limits"/> instead of
+        /// <see cref="ImageDecodeLimits.Default"/>.
+        /// </summary>
+        /// <param name="filename">The file to load from.</param>
+        /// <param name="limits">The resource limits for this decode.</param>
+        /// <returns>The loaded image.</returns>
+        public static Image FromFile(string filename, ImageDecodeLimits limits) => Bitmap.FromFile(filename, limits);
+
+        /// <summary>
         /// Creates an <see cref="Image"/> from the specified stream.
         /// </summary>
         /// <param name="stream">The stream to load from.</param>
         /// <returns>The loaded image.</returns>
         public static Image FromStream(Stream stream)   => Bitmap.FromStream(stream);
+
+        /// <summary>
+        /// Creates an <see cref="Image"/> from the specified stream, enforcing <paramref name="limits"/> instead of
+        /// <see cref="ImageDecodeLimits.Default"/>.
+        /// </summary>
+        /// <param name="stream">The stream to load from.</param>
+        /// <param name="limits">The resource limits for this decode.</param>
+        /// <returns>The loaded image.</returns>
+        public static Image FromStream(Stream stream, ImageDecodeLimits limits) => Bitmap.FromStream(stream, limits);
 
         // ── IDisposable ──────────────────────────────────────────────────────────
 

@@ -25,25 +25,40 @@ namespace DRIT.Drawing.Metafile.EmfPlus
         {
             var reader = new BinaryReader(stream);
 
-            DataSize = reader.ReadUInt32();
             CommentIdentifier = reader.ReadUInt32();
+            DataSize = (uint)(stream.Length - stream.Position);
 
-            while (stream.Position < stream.Length)
+            while (stream.Position + 12 <= stream.Length)
             {
-                
                 var header = new RecordHeader();
                 header.Read(reader);
 
-                //long expectedEndPosition = stream.Position + (header.Size) - 8;
-                var record = CreateRecord(header, reader);
+                const uint recordHeaderSize = 12;
+                if (header.Size < recordHeaderSize || header.DataSize > header.Size - recordHeaderSize)
+                {
+                    throw new InvalidDataException("The EMF+ record declares an invalid size.");
+                }
+
+                long recordEnd = stream.Position + header.Size - recordHeaderSize;
+                if (recordEnd > stream.Length)
+                {
+                    throw new EndOfStreamException("The EMF+ record extends beyond the enclosing stream.");
+                }
+
+                byte[] payload = reader.ReadBytes(Convert.ToInt32(header.DataSize));
+                if (payload.Length != header.DataSize)
+                {
+                    throw new EndOfStreamException("The EMF+ record payload is truncated.");
+                }
+
+                var record = CreateRecord(header, new BinaryReader(new MemoryStream(payload, writable: false)));
                 if (record == null)
                 {
-                    record = new Record { Header = header };
-                    record.Read(reader);
+                    record = new Record { Header = header, Data = payload };
                 }
-                
+
                 this.Records.Add(record);
-                //stream.Position = expectedEndPosition;
+                stream.Position = recordEnd;
             }
         }
 

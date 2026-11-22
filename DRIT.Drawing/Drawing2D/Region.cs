@@ -18,6 +18,8 @@ namespace DRIT.Drawing.Drawing2D
         // The root node of the CSG tree.
         private RegionNode _root;
 
+        internal RegionNode Root => _root;
+
         // -----------------------------------------------------------------------
         // Constructors
         // -----------------------------------------------------------------------
@@ -335,6 +337,9 @@ namespace DRIT.Drawing.Drawing2D
 
         /// <summary>Gets the bounding rectangle of this region.</summary>
         public RectangleF GetBounds(Graphics? g = null) => _root.GetBounds();
+
+            internal GraphicsPath? GetSinglePath()
+                => _root is LeafPathNode path ? path.Path.Clone() : null;
 
         // -----------------------------------------------------------------------
         // Serialization

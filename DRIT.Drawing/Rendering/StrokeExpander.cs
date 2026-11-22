@@ -6,7 +6,7 @@ namespace DRIT.Drawing.Rendering
 {
     internal static class StrokeExpander
     {
-        public static GraphicsPath Expand(GraphicsPath source, Pens.Pen pen, Matrix? transform = null, float flatness = 0.25f)
+        public static GraphicsPath Expand(GraphicsPath source, Pens.Pen pen, Matrix? transform = null, float flatness = 0.25f, float minHalfWidth = 0.5f)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
             if (pen == null) throw new ArgumentNullException(nameof(pen));
@@ -21,9 +21,10 @@ namespace DRIT.Drawing.Rendering
             byte[] types = effective.PathTypes;
             var outline = new GraphicsPath(FillMode.Winding);
 
-            float halfWidth = Math.Max(0.5f, pen.Width * 0.5f);
+            float halfWidth = Math.Max(minHalfWidth, pen.Width * 0.5f);
+            float penWidth = halfWidth * 2f;
             int subpathStart = -1;
-            PointF? firstDir = null;
+            bool subpathClosed = false;
             PointF? lastDir = null;
 
             for (int i = 0; i < points.Length; i++)
@@ -32,7 +33,7 @@ namespace DRIT.Drawing.Rendering
                 if (raw == (byte)PathPointType.Start)
                 {
                     subpathStart = i;
-                    firstDir = null;
+                    subpathClosed = IsSubpathClosed(types, i);
                     lastDir = null;
                     continue;
                 }
@@ -40,15 +41,35 @@ namespace DRIT.Drawing.Rendering
                 PointF a = points[i - 1];
                 PointF b = points[i];
                 PointF dir = new PointF(b.X - a.X, b.Y - a.Y);
-                if (Math.Abs(dir.X) < 1e-6f && Math.Abs(dir.Y) < 1e-6f)
+                float length = (float)Math.Sqrt(dir.X * dir.X + dir.Y * dir.Y);
+                if (length < 1e-6f)
                     continue;
 
-                AddSegmentQuad(outline, a, b, halfWidth);
-                if (firstDir == null)
-                    firstDir = dir;
                 lastDir = dir;
-
                 bool closes = (types[i] & (byte)PathPointType.CloseSubpath) != 0;
+                bool isFirstSegment = subpathStart >= 0 && i == subpathStart + 1;
+                bool endOfOpenSubpath = !closes && !subpathClosed
+                    && (i + 1 >= points.Length || (types[i + 1] & (byte)PathPointType.PathTypeMask) == (byte)PathPointType.Start);
+
+                // The body of an open line stops short of an end that carries an arrow-like cap.
+                PointF bodyStart = a;
+                PointF bodyEnd = b;
+                float unitX = dir.X / length, unitY = dir.Y / length;
+                if (isFirstSegment && !subpathClosed)
+                {
+                    float inset = Math.Min(LineCapRenderer.GetBodyInset(pen, true, penWidth), length);
+                    bodyStart = new PointF(a.X + unitX * inset, a.Y + unitY * inset);
+                }
+                if (endOfOpenSubpath)
+                {
+                    float room = length - (float)Math.Sqrt(
+                        (bodyStart.X - a.X) * (bodyStart.X - a.X) + (bodyStart.Y - a.Y) * (bodyStart.Y - a.Y));
+                    float inset = Math.Min(LineCapRenderer.GetBodyInset(pen, false, penWidth), room);
+                    bodyEnd = new PointF(b.X - unitX * inset, b.Y - unitY * inset);
+                }
+
+                AddSegmentQuad(outline, bodyStart, bodyEnd, halfWidth);
+
                 if (closes && subpathStart >= 0 && subpathStart != i)
                 {
                     PointF c = points[subpathStart];
@@ -56,17 +77,25 @@ namespace DRIT.Drawing.Rendering
                     if (Math.Abs(closeDir.X) > 1e-6f || Math.Abs(closeDir.Y) > 1e-6f)
                         AddSegmentQuad(outline, b, c, halfWidth);
                 }
-                else if (subpathStart >= 0 && i == subpathStart + 1)
-                {
-                    LineCapRenderer.AddCap(outline, a, dir, halfWidth, pen.StartCap);
-                }
 
-                bool endOfOpenSubpath = !closes && (i + 1 >= points.Length || (types[i + 1] & (byte)PathPointType.PathTypeMask) == (byte)PathPointType.Start);
+                if (isFirstSegment && !subpathClosed)
+                    LineCapRenderer.AddPenCap(outline, a, new PointF(-dir.X, -dir.Y), pen, true, halfWidth);
+
                 if (endOfOpenSubpath && lastDir != null)
-                    LineCapRenderer.AddCap(outline, b, lastDir.Value, halfWidth, pen.EndCap);
+                    LineCapRenderer.AddPenCap(outline, b, lastDir.Value, pen, false, halfWidth);
             }
 
             return outline;
+        }
+
+        /// <summary>True when the figure that starts at <paramref name="start"/> ends with a close flag.</summary>
+        private static bool IsSubpathClosed(byte[] types, int start)
+        {
+            int end = start;
+            while (end + 1 < types.Length
+                   && (types[end + 1] & (byte)PathPointType.PathTypeMask) != (byte)PathPointType.Start)
+                end++;
+            return end > start && (types[end] & (byte)PathPointType.CloseSubpath) != 0;
         }
 
         private static void AddSegmentQuad(GraphicsPath path, PointF a, PointF b, float halfWidth)

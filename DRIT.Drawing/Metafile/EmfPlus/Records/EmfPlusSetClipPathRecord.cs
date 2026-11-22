@@ -7,7 +7,7 @@ namespace DRIT.Drawing.Metafile.EmfPlus.Records
     {
         public uint PathId;
 
-        public EmfPlusCombineMode CombineMode => (EmfPlusCombineMode)(Header.Flags & 0x000F);
+        public EmfPlusCombineMode CombineMode => (EmfPlusCombineMode)((Header.Flags >> 8) & 0x000F);
 
         public override void Read(BinaryReader reader)
         {

@@ -4,8 +4,8 @@ namespace DRIT.Drawing.Brushes
 {
     /// <summary>
     /// Defines objects used to fill the interior of shapes, such as rectangles, ellipses, and paths.
-    /// This is the base class for all brush types including <see cref="SolidBrush"/>, <see cref="HatchBrush"/>,
-    /// <see cref="LinearGradientBrush"/>, <see cref="PathGradientBrush"/>, and <see cref="TextureBrush"/>.
+    /// This is the base class for all brush types     including <see cref="SolidBrush"/>, <see cref="DRIT.Drawing.Drawing2D.HatchBrush"/>,
+        /// <see cref="DRIT.Drawing.Drawing2D.LinearGradientBrush"/>, <see cref="DRIT.Drawing.Drawing2D.PathGradientBrush"/>, and <see cref="TextureBrush"/>.
     /// </summary>
     /// <remarks>
     /// Brushes are used with <see cref="Graphics"/> objects to fill shapes.
@@ -13,6 +13,13 @@ namespace DRIT.Drawing.Brushes
     /// </remarks>
     public abstract class Brush : IDisposable
     {
+        /// <summary>
+        /// Initializes a empty <see cref="Brush"/> instance.
+        /// </summary>
+        protected Brush()
+        {
+        }
+
         private bool _disposed;
 
         /// <summary>
