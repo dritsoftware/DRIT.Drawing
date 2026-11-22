@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using DRIT.Drawing.Enums;
 
 namespace DRIT.Drawing.Text
@@ -54,7 +55,7 @@ namespace DRIT.Drawing.Text
                 }
             }
 
-            if (platform == PlatformID.MacOSX)
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
                 switch (generic)
                 {

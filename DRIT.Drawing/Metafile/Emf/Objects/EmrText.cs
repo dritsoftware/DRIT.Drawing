@@ -71,8 +71,10 @@ namespace DRIT.Drawing.Metafile.Emf.Objects
         /// </summary>
         public byte[] OutputDx { get; set; } = Array.Empty<byte>();
 
-        public void Read(BinaryReader reader, uint recordOffset = 0)
+        public void Read(BinaryReader reader, uint recordOffset = 0, int characterWidth = 2)
         {
+            if (characterWidth != 1 && characterWidth != 2)
+                throw new ArgumentOutOfRangeException(nameof(characterWidth));
             long startPosition = reader.BaseStream.Position;
 
             var reference = new PointL();
@@ -95,7 +97,7 @@ namespace DRIT.Drawing.Metafile.Emf.Objects
                 UndefinedSpace1 = reader.ReadBytes(undefinedSpace1Length);
             }
 
-            int outputStringLength = checked((int)Chars * 2);
+            int outputStringLength = checked((int)Chars * characterWidth);
             OutputString = reader.ReadBytes(outputStringLength);
 
             long currentOffset = headerSize + undefinedSpace1Length + outputStringLength;
@@ -119,11 +121,13 @@ namespace DRIT.Drawing.Metafile.Emf.Objects
             }
         }
 
-        public void Write(BinaryWriter writer, uint recordOffset = 0)
+        public void Write(BinaryWriter writer, uint recordOffset = 0, int characterWidth = 2)
         {
+            if (characterWidth != 1 && characterWidth != 2)
+                throw new ArgumentOutOfRangeException(nameof(characterWidth));
             const uint headerSize = 40;
-            uint chars = Chars == 0 ? (uint)(OutputString.Length / 2) : Chars;
-            uint outputStringLength = checked(chars * 2);
+            uint chars = Chars == 0 ? (uint)(OutputString.Length / characterWidth) : Chars;
+            uint outputStringLength = checked(chars * (uint)characterWidth);
             uint offStringValue = offString == 0
                 ? recordOffset + headerSize + (uint)UndefinedSpace1.Length
                 : offString;

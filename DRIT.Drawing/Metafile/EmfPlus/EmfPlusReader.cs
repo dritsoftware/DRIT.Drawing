@@ -25,8 +25,21 @@ namespace DRIT.Drawing.Metafile.EmfPlus
         {
             var reader = new BinaryReader(stream);
 
-            CommentIdentifier = reader.ReadUInt32();
-            DataSize = (uint)(stream.Length - stream.Position);
+            uint first = reader.ReadUInt32();
+            if (first == 0x2B464D45)
+            {
+                // EMF+ payload embedded in an EMF comment begins with the identifier.
+                CommentIdentifier = first;
+                DataSize = checked((uint)(stream.Length - stream.Position));
+            }
+            else
+            {
+                // Standalone EMF+ starts with DataSize followed by the identifier.
+                DataSize = first;
+                CommentIdentifier = reader.ReadUInt32();
+                if (CommentIdentifier != 0x2B464D45)
+                    throw new InvalidDataException("The EMF+ stream has an invalid identifier.");
+            }
 
             while (stream.Position + 12 <= stream.Length)
             {

@@ -12,7 +12,17 @@ namespace DRIT.Drawing.Codecs
 
         public Bitmap Decode(Stream stream)
         {
-            using var metafile = new DRIT.Drawing.Imaging.Metafile(stream);
+            if (stream == null) throw new ArgumentNullException(nameof(stream));
+
+            // Metafile parses and rasterization are not performed by the native image
+            // codecs, so make their source and bitmap allocations subject to the same
+            // scoped limits as every other decoder.
+            byte[] bytes = CodecValidation.ReadAll(stream, "metafile");
+            using var metafile = new DRIT.Drawing.Imaging.Metafile(
+                new MemoryStream(bytes, writable: false));
+            CodecValidation.ValidateDimensions(metafile.Width, metafile.Height, "metafile");
+            CodecValidation.CheckedBufferLength((long)metafile.Width * metafile.Height * 4,
+                "metafile raster");
             return metafile.RenderToBitmap();
         }
 

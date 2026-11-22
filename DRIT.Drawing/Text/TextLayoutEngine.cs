@@ -31,6 +31,20 @@ namespace DRIT.Drawing.Text
 
             sf = sf ?? StringFormat.GenericDefault;
 
+            // Formatted single-run text must use the same line breaking and
+            // spacing calculations as rich text; Graphics.MeasureString and
+            // SVG text mode both enter through this overload.
+            if (Math.Abs(sf.FirstLineIndent) > 0.001f ||
+                sf.Alignment == StringAlignment.Justify ||
+                sf.Alignment == StringAlignment.Distributed)
+            {
+                int bidiLevel = (sf.FormatFlags & StringFormatFlags.DirectionRightToLeft) != 0 ? 1 : 0;
+                return Layout(new List<ResolvedRun>
+                {
+                    new ResolvedRun(text, font, null, bidiLevel, 0)
+                }, layoutRect, sf, dpiX, dpiY);
+            }
+
             var metrics    = font.FontFamily.GetMetricsData(font.Style);
             float emPixels = FontSizeToPixels(font.Size, font.Unit, dpiY);
             float emScale  = metrics.UnitsPerEm > 0
@@ -395,13 +409,32 @@ namespace DRIT.Drawing.Text
             }
 
             float extra = layoutWidth - line.Width;
+            bool expanded = false;
             if (distributeCharacters && characterCount > 1)
             {
                 line.ExtraCharacterSpacing = extra / (characterCount - 1);
+                expanded = true;
             }
             else if (spaceCount > 0)
             {
                 line.ExtraSpaceSpacing = extra / spaceCount;
+                expanded = true;
+            }
+
+            if (!expanded)
+                return;
+
+            for (int i = 0; i < line.Runs.Count; i++)
+            {
+                TextRun run = line.Runs[i];
+                int characterGaps = run.Text.Length - (i == line.Runs.Count - 1 ? 1 : 0);
+                int spaces = 0;
+                foreach (char c in run.Text)
+                {
+                    if (c == ' ')
+                        spaces++;
+                }
+                run.Width += characterGaps * line.ExtraCharacterSpacing + spaces * line.ExtraSpaceSpacing;
             }
 
             line.Width = layoutWidth;

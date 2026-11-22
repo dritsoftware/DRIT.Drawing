@@ -80,6 +80,22 @@ namespace DRIT.Drawing.Tests.Vector
         }
 
         [TestMethod]
+        public void SvgImage_CustomResolution_IsReportedAndPreservedWhenRasterized()
+        {
+            using var image = new SvgImage(20, 10, 300f, 144f);
+            Assert.AreEqual(300f, image.HorizontalResolution);
+            Assert.AreEqual(144f, image.VerticalResolution);
+
+            using var bitmap = image.RenderToBitmap();
+            Assert.AreEqual(300f, bitmap.HorizontalResolution);
+            Assert.AreEqual(144f, bitmap.VerticalResolution);
+        }
+
+        [TestMethod]
+        public void EmptyEmfEof_DeclaresItsOwnRecordSize()
+            => Assert.AreEqual(20u, new EMR_EOF().SizeLast);
+
+        [TestMethod]
         public void SvgImage_ExcelCompatibleLargeOpenStrokes_UsePolyline16()
         {
             var image = new SvgImage(2600, 1800, 600f, 600f)

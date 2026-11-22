@@ -233,14 +233,14 @@ namespace DRIT.Drawing.Rendering
                     case EMR_POLYGON polygon when polygon.Points.Length >= 2:
                     {
                         var points = MapPoints(viewport, polygon.Points);
-                        FillPolygon(ctx, currentBrush, points);
+                        FillPolygon(ctx, currentBrush, points, viewport.MapPoint(brushOrigin.X, brushOrigin.Y));
                         DrawPolygon(ctx, currentPen, points);
                         break;
                     }
                     case EMR_POLYGON16 polygon16 when polygon16.Points.Length >= 2:
                     {
                         var points = MapPointsS(viewport, polygon16.Points);
-                        FillPolygon(ctx, currentBrush, points);
+                        FillPolygon(ctx, currentBrush, points, viewport.MapPoint(brushOrigin.X, brushOrigin.Y));
                         DrawPolygon(ctx, currentPen, points);
                         break;
                     }
@@ -251,7 +251,7 @@ namespace DRIT.Drawing.Rendering
                         RectangleF rect = viewport.MapRect(
                             rectangle.Box.Left, rectangle.Box.Top,
                             rectangle.Box.Right, rectangle.Box.Bottom);
-                        FillRectangle(ctx, currentBrush, rect);
+                        FillRectangle(ctx, currentBrush, rect, viewport.MapPoint(brushOrigin.X, brushOrigin.Y));
                         DrawRectangle(ctx, currentPen, rect);
                         break;
                     }
@@ -260,7 +260,7 @@ namespace DRIT.Drawing.Rendering
                         RectangleF rect = viewport.MapRect(
                             ellipse.Box.Left, ellipse.Box.Top,
                             ellipse.Box.Right, ellipse.Box.Bottom);
-                        FillEllipse(ctx, currentBrush, rect);
+                        FillEllipse(ctx, currentBrush, rect, viewport.MapPoint(brushOrigin.X, brushOrigin.Y));
                         DrawEllipse(ctx, currentPen, rect);
                         break;
                     }
@@ -296,14 +296,14 @@ namespace DRIT.Drawing.Rendering
                     case EMR_FILLPATH _:
                     {
                         if (pathBuilder != null && pathBuilder.PointCount > 0)
-                            FillPathDirect(ctx, currentBrush, pathBuilder);
+                            FillPathDirect(ctx, currentBrush, pathBuilder, viewport.MapPoint(brushOrigin.X, brushOrigin.Y));
                         break;
                     }
                     case EMR_STROKEANDFILLPATH _:
                     {
                         if (pathBuilder != null && pathBuilder.PointCount > 0)
                         {
-                            FillPathDirect(ctx, currentBrush, pathBuilder);
+                            FillPathDirect(ctx, currentBrush, pathBuilder, viewport.MapPoint(brushOrigin.X, brushOrigin.Y));
                             DrawPathDirect(ctx, currentPen, pathBuilder);
                         }
                         break;
@@ -456,15 +456,15 @@ namespace DRIT.Drawing.Rendering
                     // ── Image ──
                     case EMR_BITBLT bitBlt when IsPatCopy(bitBlt.BitBltRasterOperation):
                     {
+                        var destRect = viewport.MapRect(
+                            bitBlt.XDest, bitBlt.YDest,
+                            bitBlt.XDest + bitBlt.CxDest,
+                            bitBlt.YDest + bitBlt.CyDest);
+                        var mappedOrigin = viewport.MapPoint(brushOrigin.X, brushOrigin.Y);
                         if (currentBrush.PatternBitmap != null)
-                        {
-                            var destRect = viewport.MapRect(
-                                bitBlt.XDest, bitBlt.YDest,
-                                bitBlt.XDest + bitBlt.CxDest,
-                                bitBlt.YDest + bitBlt.CyDest);
-                            var mappedOrigin = viewport.MapPoint(brushOrigin.X, brushOrigin.Y);
                             FillTextureRectangle(ctx, currentBrush.PatternBitmap, destRect, mappedOrigin);
-                        }
+                        else if (!currentBrush.IsNull)
+                            FillRectangle(ctx, currentBrush, destRect, mappedOrigin);
                         break;
                     }
                     case EMR_BITBLT bitBlt when IsDestinationCopy(bitBlt.BitBltRasterOperation):
@@ -587,10 +587,10 @@ namespace DRIT.Drawing.Rendering
             ctx.DrawPath(pen, path);
         }
 
-        private static void FillPathDirect(IDrawingContext ctx, BrushState brushState, GraphicsPath path)
+        private static void FillPathDirect(IDrawingContext ctx, BrushState brushState, GraphicsPath path, PointF patternOrigin)
         {
             if (brushState.IsNull) return;
-            using var brush = new SolidBrush(brushState.Color);
+            using Brush brush = CreateFillBrush(brushState, patternOrigin);
             ctx.FillPath(brush, path);
         }
 
@@ -621,10 +621,10 @@ namespace DRIT.Drawing.Rendering
             ctx.DrawPath(pen, path);
         }
 
-        private static void FillPolygon(IDrawingContext ctx, BrushState brushState, PointF[] points)
+        private static void FillPolygon(IDrawingContext ctx, BrushState brushState, PointF[] points, PointF patternOrigin)
         {
             if (brushState.IsNull) return;
-            using var brush = new SolidBrush(brushState.Color);
+            using Brush brush = CreateFillBrush(brushState, patternOrigin);
             var path = new GraphicsPath();
             path.AddPolygon(points);
             ctx.FillPath(brush, path);
@@ -639,10 +639,10 @@ namespace DRIT.Drawing.Rendering
             ctx.DrawPath(pen, path);
         }
 
-        private static void FillRectangle(IDrawingContext ctx, BrushState brushState, RectangleF rect)
+        private static void FillRectangle(IDrawingContext ctx, BrushState brushState, RectangleF rect, PointF patternOrigin)
         {
             if (brushState.IsNull) return;
-            using var brush = new SolidBrush(brushState.Color);
+            using Brush brush = CreateFillBrush(brushState, patternOrigin);
             var path = new GraphicsPath();
             path.AddRectangle(rect);
             ctx.FillPath(brush, path);
@@ -658,6 +658,16 @@ namespace DRIT.Drawing.Rendering
             ctx.FillPath(brush, path);
         }
 
+        private static Brush CreateFillBrush(BrushState brushState, PointF patternOrigin)
+        {
+            if (brushState.PatternBitmap == null)
+                return new SolidBrush(brushState.Color);
+
+            var brush = new TextureBrush(brushState.PatternBitmap);
+            brush.TranslateTransform(patternOrigin.X, patternOrigin.Y);
+            return brush;
+        }
+
         private static void DrawEllipse(IDrawingContext ctx, PenState penState, RectangleF rect)
         {
             if (penState.IsNull) return;
@@ -667,10 +677,10 @@ namespace DRIT.Drawing.Rendering
             ctx.DrawPath(pen, path);
         }
 
-        private static void FillEllipse(IDrawingContext ctx, BrushState brushState, RectangleF rect)
+        private static void FillEllipse(IDrawingContext ctx, BrushState brushState, RectangleF rect, PointF patternOrigin)
         {
             if (brushState.IsNull) return;
-            using var brush = new SolidBrush(brushState.Color);
+            using Brush brush = CreateFillBrush(brushState, patternOrigin);
             var path = new GraphicsPath();
             path.AddEllipse(rect);
             ctx.FillPath(brush, path);

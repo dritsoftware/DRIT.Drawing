@@ -12,7 +12,7 @@ namespace DRIT.Drawing.Metafile.Emf.Records.DrawingRecordTypes
 
         public uint OffsetToPalEntries;
 
-        public uint SizeLast;
+        public uint SizeLast = 20;
 
         public byte[] EndOfFileData { get; set; } = Array.Empty<byte>();
 

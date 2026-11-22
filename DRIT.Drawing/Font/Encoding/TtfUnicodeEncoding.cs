@@ -18,10 +18,16 @@ namespace DRIT.Drawing.Font.Encoding
         /// <see cref="TtfCMapTable.FindUnicodeTable"/>.
         /// Must not be null.
         /// </param>
-        /// <param name="legacySymbolFont">
-        /// <c>true</c> when the font uses the Windows legacy symbol-font private-use mapping.
-        /// </param>
-        public TtfUnicodeEncoding(TtfCMapFormatBaseTable cmapTable, bool legacySymbolFont = false)
+        /// <summary>Creates a Unicode encoding without legacy symbol-font mapping.</summary>
+        public TtfUnicodeEncoding(TtfCMapFormatBaseTable cmapTable)
+            : this(cmapTable, false)
+        {
+        }
+
+        /// <summary>Creates a Unicode encoding with optional legacy symbol-font mapping.</summary>
+        /// <param name="cmapTable">The Unicode-capable character map table.</param>
+        /// <param name="legacySymbolFont">Whether to apply the Windows private-use symbol mapping.</param>
+        public TtfUnicodeEncoding(TtfCMapFormatBaseTable cmapTable, bool legacySymbolFont)
         {
             _cmapTable = cmapTable;
             _legacySymbolFont = legacySymbolFont;

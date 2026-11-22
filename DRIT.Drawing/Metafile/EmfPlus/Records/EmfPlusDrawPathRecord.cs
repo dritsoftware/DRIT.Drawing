@@ -27,7 +27,7 @@ namespace DRIT.Drawing.Metafile.EmfPlus.Records
 
         public override void Write(BinaryWriter writer)
         {
-            writer.Write(PathId);
+            writer.Write(PenId);
             writer.Write(Data);
         }
     }

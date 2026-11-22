@@ -102,6 +102,12 @@ namespace DRIT.Drawing.Imaging
         public override int Height => _scene.Height;
 
         /// <inheritdoc/>
+        public override float HorizontalResolution => _scene.DpiX;
+
+        /// <inheritdoc/>
+        public override float VerticalResolution => _scene.DpiY;
+
+        /// <inheritdoc/>
         public override PixelFormat PixelFormat => PixelFormat.Format32bppArgb;
 
         /// <inheritdoc/>
@@ -143,6 +149,8 @@ namespace DRIT.Drawing.Imaging
             height = Math.Max(1, height);
 
             var bitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+            bitmap._dpiX = _scene.DpiX;
+            bitmap._dpiY = _scene.DpiY;
             using var g = Graphics.FromImage(bitmap);
 
             // If scaled, apply a scale transform
