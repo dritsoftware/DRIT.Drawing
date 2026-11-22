@@ -137,6 +137,13 @@ namespace DRIT.Drawing.Vector.Commands
     public sealed class SaveStateCommand : DrawingCommand
     {
         /// <summary>
+        /// Initializes a empty <see cref="SaveStateCommand"/> instance.
+        /// </summary>
+        public SaveStateCommand()
+        {
+        }
+
+        /// <summary>
         /// Gets or sets the state token produced during the most recent replay.
         /// </summary>
         internal GraphicsState? LastToken { get; set; }

@@ -6,7 +6,7 @@
     internal enum PostScriptCap
     {
         /// <summary>
-        ///     Specifies that the line-ending style has not been set, and that a default style MAY <24> be used.
+        ///     Specifies that the line-ending style has not been set, and that a default style MAY <c>24</c> be used.
         /// </summary>
         PostScriptNotSet = -2,
 

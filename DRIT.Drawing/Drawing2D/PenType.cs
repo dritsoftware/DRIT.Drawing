@@ -1,7 +1,7 @@
 namespace DRIT.Drawing.Drawing2D
 {
     /// <summary>
-    /// Specifies the type of a <see cref="Pen"/> fill.
+    /// Specifies the type of a <see cref="DRIT.Drawing.Pens.Pen"/> fill.
     /// </summary>
     public enum PenType
     {

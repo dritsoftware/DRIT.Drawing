@@ -1,4 +1,3 @@
-using System.IO;
 using DRIT.Drawing.Brushes;
 using DRIT.Drawing.Colors;
 using DRIT.Drawing.Drawing2D;
@@ -17,22 +16,12 @@ namespace DRIT.Drawing.Tests.Text
 
         // ── Helpers ────────────────────────────────────────────────────────────
 
-        private static string GetGlyphiconsPath() =>
-            Path.GetFullPath(Path.Combine(
-                AppContext.BaseDirectory,
-                "..", "..", "..", "..", "..",
-                "DRIT.Drawing.Tests",
-                "TestAssets",
-                "Fonts",
-                "glyphicons-halflings-regular.ttf"));
-
-        private static FontFamily? TryLoadFont()
+        private static FontFamily LoadTestFont()
         {
-            string path = GetGlyphiconsPath();
-            if (!File.Exists(path)) return null;
             var pfc = new PrivateFontCollection();
-            pfc.AddFontFile(path);
-            return pfc.Families.Length > 0 ? pfc.Families[0] : null;
+            pfc.AddFontFile(TestFont.Path);
+            Assert.IsTrue(pfc.Families.Length > 0, "The required test font did not load a family.");
+            return pfc.Families[0];
         }
 
         private static bool HasNonWhitePixels(Bitmap bmp)
@@ -70,16 +59,31 @@ namespace DRIT.Drawing.Tests.Text
         }
 
         [TestMethod]
-        public void BuildPath_FallbackFont_EmptyResult()
+        public void BuildPath_FamilyWithoutFontFace_EmptyResult()
         {
-            // GenericSansSerif has no real IFont → no glyph outlines → empty result.
-            using var fam = FontFamily.GenericSansSerif;
+            // A family that is neither installed nor generic has no IFont, so there are no outlines.
+            using var fam = new FontFamily("No Such Family 7f3a91");
             using var font = new DRIT.Drawing.Text.Font(fam, 12f, FontStyle.Regular, GraphicsUnit.Point);
             var baseline = new GraphicsPath();
             baseline.AddLine(0f, 0f, 500f, 0f);
 
             var result = TextOnPathLayout.BuildPath("ABC", font, baseline, null, null, 96f, 96f);
             Assert.AreEqual(0, result.PointCount);
+        }
+
+        [TestMethod]
+        public void BuildPath_GenericFamily_ProducesOutlinesFromInstalledStandIn()
+        {
+            if (GenericFontResolver.Resolve(GenericFontFamilies.SansSerif) == null)
+                Assert.Inconclusive("No stand-in font for the generic sans-serif family is installed.");
+
+            using var fam = FontFamily.GenericSansSerif;
+            using var font = new DRIT.Drawing.Text.Font(fam, 12f, FontStyle.Regular, GraphicsUnit.Point);
+            var baseline = new GraphicsPath();
+            baseline.AddLine(0f, 0f, 500f, 0f);
+
+            var result = TextOnPathLayout.BuildPath("ABC", font, baseline, null, null, 96f, 96f);
+            Assert.IsTrue(result.PointCount > 0);
         }
 
         // -----------------------------------------------------------------------
@@ -89,8 +93,7 @@ namespace DRIT.Drawing.Tests.Text
         [TestMethod]
         public void BuildPath_HorizontalLine_PopulatesPath()
         {
-            FontFamily? fam = TryLoadFont();
-            if (fam == null) Assert.Inconclusive("Glyphicons font not found.");
+            FontFamily fam = LoadTestFont();
 
             using (fam)
             {
@@ -106,8 +109,7 @@ namespace DRIT.Drawing.Tests.Text
         [TestMethod]
         public void BuildPath_HorizontalLine_GlyphsAboveOrOnPath()
         {
-            FontFamily? fam = TryLoadFont();
-            if (fam == null) Assert.Inconclusive("Glyphicons font not found.");
+            FontFamily fam = LoadTestFont();
 
             using (fam)
             {
@@ -129,8 +131,7 @@ namespace DRIT.Drawing.Tests.Text
         [TestMethod]
         public void BuildPath_VerticalLine_GlyphsRotated()
         {
-            FontFamily? fam = TryLoadFont();
-            if (fam == null) Assert.Inconclusive("Glyphicons font not found.");
+            FontFamily fam = LoadTestFont();
 
             using (fam)
             {
@@ -152,8 +153,7 @@ namespace DRIT.Drawing.Tests.Text
         [TestMethod]
         public void BuildPath_Circle_GlyphsRotateAround()
         {
-            FontFamily? fam = TryLoadFont();
-            if (fam == null) Assert.Inconclusive("Glyphicons font not found.");
+            FontFamily fam = LoadTestFont();
 
             using (fam)
             {
@@ -191,8 +191,7 @@ namespace DRIT.Drawing.Tests.Text
         [TestMethod]
         public void BuildPath_AlignmentNear_StartsAt0()
         {
-            FontFamily? fam = TryLoadFont();
-            if (fam == null) Assert.Inconclusive("Glyphicons font not found.");
+            FontFamily fam = LoadTestFont();
 
             using (fam)
             {
@@ -213,8 +212,7 @@ namespace DRIT.Drawing.Tests.Text
         [TestMethod]
         public void BuildPath_AlignmentFar_EndsAtPathEnd()
         {
-            FontFamily? fam = TryLoadFont();
-            if (fam == null) Assert.Inconclusive("Glyphicons font not found.");
+            FontFamily fam = LoadTestFont();
 
             using (fam)
             {
@@ -236,8 +234,7 @@ namespace DRIT.Drawing.Tests.Text
         [TestMethod]
         public void BuildPath_AlignmentCenter_CentersText()
         {
-            FontFamily? fam = TryLoadFont();
-            if (fam == null) Assert.Inconclusive("Glyphicons font not found.");
+            FontFamily fam = LoadTestFont();
 
             using (fam)
             {
@@ -263,8 +260,7 @@ namespace DRIT.Drawing.Tests.Text
         [TestMethod]
         public void BuildPath_StartOffset_ShiftsFirstGlyph()
         {
-            FontFamily? fam = TryLoadFont();
-            if (fam == null) Assert.Inconclusive("Glyphicons font not found.");
+            FontFamily fam = LoadTestFont();
 
             using (fam)
             {
@@ -284,8 +280,7 @@ namespace DRIT.Drawing.Tests.Text
         [TestMethod]
         public void BuildPath_PerpendicularOffsetAbove_GlyphsAbovePath()
         {
-            FontFamily? fam = TryLoadFont();
-            if (fam == null) Assert.Inconclusive("Glyphicons font not found.");
+            FontFamily fam = LoadTestFont();
 
             using (fam)
             {
@@ -307,8 +302,7 @@ namespace DRIT.Drawing.Tests.Text
         [TestMethod]
         public void BuildPath_PerpendicularOffsetBelow_GlyphsBelowPath()
         {
-            FontFamily? fam = TryLoadFont();
-            if (fam == null) Assert.Inconclusive("Glyphicons font not found.");
+            FontFamily fam = LoadTestFont();
 
             using (fam)
             {
@@ -333,8 +327,7 @@ namespace DRIT.Drawing.Tests.Text
         [TestMethod]
         public void BuildPath_TextLongerThanPath_StopsGracefully()
         {
-            FontFamily? fam = TryLoadFont();
-            if (fam == null) Assert.Inconclusive("Glyphicons font not found.");
+            FontFamily fam = LoadTestFont();
 
             using (fam)
             {
@@ -361,8 +354,7 @@ namespace DRIT.Drawing.Tests.Text
         [TestMethod]
         public void BuildPath_TabSkipped_NoGlyphForTab()
         {
-            FontFamily? fam = TryLoadFont();
-            if (fam == null) Assert.Inconclusive("Glyphicons font not found.");
+            FontFamily fam = LoadTestFont();
 
             using (fam)
             {
@@ -392,8 +384,7 @@ namespace DRIT.Drawing.Tests.Text
         [TestMethod]
         public void AddStringOnPath_AddsToExistingPath()
         {
-            FontFamily? fam = TryLoadFont();
-            if (fam == null) Assert.Inconclusive("Glyphicons font not found.");
+            FontFamily fam = LoadTestFont();
 
             using (fam)
             {
@@ -414,8 +405,7 @@ namespace DRIT.Drawing.Tests.Text
         [TestMethod]
         public void AddStringOnPath_DoesNotMutateBaseline()
         {
-            FontFamily? fam = TryLoadFont();
-            if (fam == null) Assert.Inconclusive("Glyphicons font not found.");
+            FontFamily fam = LoadTestFont();
 
             using (fam)
             {
@@ -442,8 +432,7 @@ namespace DRIT.Drawing.Tests.Text
         [TestMethod]
         public void DrawStringOnPath_Smoke_RendersWithoutError()
         {
-            FontFamily? fam = TryLoadFont();
-            if (fam == null) Assert.Inconclusive("Glyphicons font not found.");
+            FontFamily fam = LoadTestFont();
 
             using (fam)
             {
@@ -468,8 +457,7 @@ namespace DRIT.Drawing.Tests.Text
         [TestMethod]
         public void DrawStringOnPath_CurvedPath_RendersWithoutError()
         {
-            FontFamily? fam = TryLoadFont();
-            if (fam == null) Assert.Inconclusive("Glyphicons font not found.");
+            FontFamily fam = LoadTestFont();
 
             using (fam)
             {

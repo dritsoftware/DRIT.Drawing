@@ -13,7 +13,6 @@ namespace DRIT.Drawing.Tests
 
         /// <summary>
         /// Builds a minimal valid 2×2 32-bpp ICO byte array (red pixels, opaque).
-        /// Reuses the same layout validated in Batch9Tests.
         /// </summary>
         internal static byte[] Make2x2RedIcoBytes() => new byte[]
         {

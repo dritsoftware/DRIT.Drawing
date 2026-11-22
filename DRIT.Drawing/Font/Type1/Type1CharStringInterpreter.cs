@@ -15,6 +15,13 @@ namespace DRIT.Drawing.Font.Type1
     /// </remarks>
     public sealed class Type1CharStringInterpreter
     {
+        /// <summary>
+        /// Initializes a empty <see cref="Type1CharStringInterpreter"/> instance.
+        /// </summary>
+        public Type1CharStringInterpreter()
+        {
+        }
+
         // ── Entry point ───────────────────────────────────────────────────────
 
         /// <summary>

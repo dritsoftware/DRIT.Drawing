@@ -130,6 +130,8 @@ namespace DRIT.Drawing.Drawing2D
             }
         }
 
+        internal PointF[] PathPoints => (PointF[])_pathPoints.Clone();
+
         /// <summary>
         /// Gets or sets the wrap mode for filling areas outside the gradient.
         /// </summary>

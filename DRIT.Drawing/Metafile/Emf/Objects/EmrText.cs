@@ -71,8 +71,10 @@ namespace DRIT.Drawing.Metafile.Emf.Objects
         /// </summary>
         public byte[] OutputDx { get; set; } = Array.Empty<byte>();
 
-        public void Read(BinaryReader reader)
+        public void Read(BinaryReader reader, uint recordOffset = 0, int characterWidth = 2)
         {
+            if (characterWidth != 1 && characterWidth != 2)
+                throw new ArgumentOutOfRangeException(nameof(characterWidth));
             long startPosition = reader.BaseStream.Position;
 
             var reference = new PointL();
@@ -88,17 +90,24 @@ namespace DRIT.Drawing.Metafile.Emf.Objects
 
             long headerSize = reader.BaseStream.Position - startPosition;
 
-            int undefinedSpace1Length = (int)(offString - headerSize);
+            int undefinedSpace1Length = (int)(offString - recordOffset - headerSize);
             if (undefinedSpace1Length < 0) throw new InvalidDataException("Invalid offString value.");
             if (undefinedSpace1Length > 0)
             {
                 UndefinedSpace1 = reader.ReadBytes(undefinedSpace1Length);
             }
 
-            OutputString = reader.ReadBytes((int)Chars);
+            int outputStringLength = checked((int)Chars * characterWidth);
+            OutputString = reader.ReadBytes(outputStringLength);
 
-            long currentOffset = headerSize + undefinedSpace1Length + Chars;
-            int undefinedSpace2Length = (int)(offDx - currentOffset);
+            long currentOffset = headerSize + undefinedSpace1Length + outputStringLength;
+            if (offDx == 0)
+            {
+                OutputDx = Array.Empty<byte>();
+                return;
+            }
+
+            int undefinedSpace2Length = (int)(offDx - recordOffset - currentOffset);
             if (undefinedSpace2Length < 0) throw new InvalidDataException("Invalid offDx value.");
             if (undefinedSpace2Length > 0)
             {
@@ -112,15 +121,26 @@ namespace DRIT.Drawing.Metafile.Emf.Objects
             }
         }
 
-        public void Write(BinaryWriter writer)
+        public void Write(BinaryWriter writer, uint recordOffset = 0, int characterWidth = 2)
         {
+            if (characterWidth != 1 && characterWidth != 2)
+                throw new ArgumentOutOfRangeException(nameof(characterWidth));
             const uint headerSize = 40;
-            uint chars = Chars == 0 ? (uint)OutputString.Length : Chars;
-            uint offStringValue = offString == 0 ? headerSize + (uint)UndefinedSpace1.Length : offString;
-            uint offDxValue = offDx == 0 ? offStringValue + chars + (uint)UndefinedSpace2.Length : offDx;
+            uint chars = Chars == 0 ? (uint)(OutputString.Length / characterWidth) : Chars;
+            uint outputStringLength = checked(chars * (uint)characterWidth);
+            uint offStringValue = offString == 0
+                ? recordOffset + headerSize + (uint)UndefinedSpace1.Length
+                : offString;
+            uint offDxValue = OutputDx.Length == 0
+                ? 0
+                : offDx == 0
+                    ? AlignToFourBytes(offStringValue + outputStringLength + (uint)UndefinedSpace2.Length)
+                    : offDx;
 
-            int undefinedSpace1Length = (int)Math.Max(0, offStringValue - headerSize);
-            int undefinedSpace2Length = (int)Math.Max(0, offDxValue - (offStringValue + chars));
+            int undefinedSpace1Length = (int)Math.Max(0, offStringValue - recordOffset - headerSize);
+            int undefinedSpace2Length = offDxValue == 0
+                ? 0
+                : (int)Math.Max(0, offDxValue - (offStringValue + outputStringLength));
 
             Reference.Write(writer);
             writer.Write(chars);
@@ -142,10 +162,10 @@ namespace DRIT.Drawing.Metafile.Emf.Objects
                 }
             }
 
-            writer.Write(OutputString, 0, (int)Math.Min(chars, (uint)OutputString.Length));
-            if (chars > OutputString.Length)
+            writer.Write(OutputString, 0, (int)Math.Min(outputStringLength, (uint)OutputString.Length));
+            if (outputStringLength > OutputString.Length)
             {
-                writer.Write(new byte[chars - OutputString.Length]);
+                writer.Write(new byte[outputStringLength - OutputString.Length]);
             }
 
             if (undefinedSpace2Length > 0)
@@ -162,6 +182,11 @@ namespace DRIT.Drawing.Metafile.Emf.Objects
             }
 
             writer.Write(OutputDx);
+        }
+
+        private static uint AlignToFourBytes(uint value)
+        {
+            return (value + 3u) & ~3u;
         }
     }
 }

@@ -34,6 +34,13 @@ namespace DRIT.Drawing.Vector.Commands
     /// </summary>
     public sealed class ResetTransformCommand : DrawingCommand
     {
+        /// <summary>
+        /// Initializes a empty <see cref="ResetTransformCommand"/> instance.
+        /// </summary>
+        public ResetTransformCommand()
+        {
+        }
+
         /// <inheritdoc/>
         internal override void Replay(IDrawingContext ctx)
             => ctx.ResetTransform();

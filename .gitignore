@@ -56,6 +56,8 @@ dlldata.c
 
 # Benchmark Results
 BenchmarkDotNet.Artifacts/
+examples-output/
+examples/**/examples-output/
 
 # .NET Core
 project.lock.json
@@ -1461,6 +1463,17 @@ DRIT.Spreadsheet/graphify-out/
 /DRIT.Spreadsheet/coverage_report
 /DRIT.Spreadsheet/docs/Microsoft
 
+# Release documentation
+!docs/Release/
+docs/Release/*
+!docs/Release/RELEASE_NOTES_26.9.md
+!docs/Release/RELEASE_NOTES_26.11.md
+
+# Keep the sync plan in the private repository.
+!internal/Docs/Release/
+internal/Docs/Release/*
+!internal/Docs/Release/PROPOSED_GITHUB_SYNC.md
+
 # Language Server cache files
 *.lscache
 
@@ -1470,3 +1483,11 @@ graphify-out/cost.json
 graphify-out/.graphify_analysis.json
 graphify-out/.graphify_labels.json
 graphify-out/cache/
+# Documentation build output (generated; publish as pipeline artifacts, do not commit)
+**/docfx_project/api/
+**/docfx_project/_site/
+**/docfx_project/obj/
+**/docfx_project/bin/
+**/docfx_project/.manifest
+**/docfx_project/docfx.log
+Docs/manual-release/

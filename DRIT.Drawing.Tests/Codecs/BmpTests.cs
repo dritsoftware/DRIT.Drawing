@@ -4,7 +4,7 @@ using DRIT.Drawing.Imaging;
 namespace DRIT.Drawing.Tests.Codecs
 {
     [TestClass]
-    internal class BmpTests
+    public class BmpTests
     {
         // ─────────────────────────────────────────────────────────────────────
         // BMP via CodecRegistry

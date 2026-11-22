@@ -8,11 +8,11 @@ namespace DRIT.Drawing.Metafile.Emf.Records.DrawingRecordTypes
 
     internal class EMR_EOF : Record
     {
-        public uint NumberOfHandles;
+        public uint NumberOfPalEntries;
 
-        public ushort Reserved;
+        public uint OffsetToPalEntries;
 
-        public ushort NumberOfRecords;
+        public uint SizeLast = 20;
 
         public byte[] EndOfFileData { get; set; } = Array.Empty<byte>();
 
@@ -23,11 +23,11 @@ namespace DRIT.Drawing.Metafile.Emf.Records.DrawingRecordTypes
 
         public override void Read(BinaryReader reader)
         {
-            NumberOfHandles = reader.ReadUInt32();
-            Reserved = reader.ReadUInt16();
-            NumberOfRecords = reader.ReadUInt16();
+            NumberOfPalEntries = reader.ReadUInt32();
+            OffsetToPalEntries = reader.ReadUInt32();
+            SizeLast = reader.ReadUInt32();
 
-            int extraBytes = Convert.ToInt32(Header.Size) - 16;
+            int extraBytes = Convert.ToInt32(Header.Size) - 20;
             if (extraBytes > 0)
             {
                 EndOfFileData = reader.ReadBytes(extraBytes);
@@ -36,9 +36,9 @@ namespace DRIT.Drawing.Metafile.Emf.Records.DrawingRecordTypes
 
         public override void Write(BinaryWriter writer)
         {
-            writer.Write(NumberOfHandles);
-            writer.Write(Reserved);
-            writer.Write(NumberOfRecords);
+            writer.Write(NumberOfPalEntries);
+            writer.Write(OffsetToPalEntries);
+            writer.Write(SizeLast);
             writer.Write(EndOfFileData);
         }
     }

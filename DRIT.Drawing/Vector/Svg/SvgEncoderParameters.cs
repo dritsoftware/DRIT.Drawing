@@ -24,6 +24,13 @@ namespace DRIT.Drawing.Vector.Svg
     public sealed class SvgEncoderParameters
     {
         /// <summary>
+        /// Initializes a empty <see cref="SvgEncoderParameters"/> instance.
+        /// </summary>
+        public SvgEncoderParameters()
+        {
+        }
+
+        /// <summary>
         /// Gets or sets the text emission mode (default: Path).
         /// </summary>
         public SvgTextMode TextMode { get; set; } = SvgTextMode.Path;
@@ -35,7 +42,8 @@ namespace DRIT.Drawing.Vector.Svg
 
         /// <summary>
         /// Gets or sets whether to embed images as inline base64 data URIs
-        /// (default: true). If false, images are referenced externally.
+            /// (default: true). If false, the current encoder rejects the request
+            /// because it has no external-resource directory or URI-base setting.
         /// </summary>
         public bool EmbedImages { get; set; } = true;
 

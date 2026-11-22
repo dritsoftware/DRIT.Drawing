@@ -13,7 +13,7 @@ namespace DRIT.Drawing.Vector.Svg
     /// Writes SVG text in two modes:
     /// <list type="bullet">
     ///   <item><b>Path mode</b> (default): vectorizes glyphs via
-    ///     <see cref="GlyphOutlineRenderer"/> into <c>&lt;path&gt;</c> elements.
+    ///     <see cref="DRIT.Drawing.Font.Rendering.GlyphOutlineRenderer"/> into <c>&lt;path&gt;</c> elements.
     ///     Pixel-identical to the rasterizer; no font dependency on viewer.</item>
     ///   <item><b>Text mode</b> (opt-in): emits <c>&lt;text&gt;</c>/<c>&lt;tspan&gt;</c>
     ///     with font attributes. Editable but best-effort fidelity.</item>
@@ -88,6 +88,22 @@ namespace DRIT.Drawing.Vector.Svg
             _w.WriteEndElement();
         }
 
+        /// <summary>
+        /// The generic families are named "Sans Serif", "Serif" and "Monospace" here; CSS only knows them
+        /// as the keywords sans-serif, serif and monospace, and treats anything else as a missing font.
+        /// </summary>
+        internal static string CssFontFamily(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return "Arial";
+            switch (name!.Trim().ToLowerInvariant())
+            {
+                case "sans serif": return "sans-serif";
+                case "serif": return "serif";
+                case "monospace": return "monospace";
+                default: return name;
+            }
+        }
+
         // ── Text mode: <text>/<tspan> ─────────────────────────────────────────
 
         private void WriteTextMode(string text, DRIT.Drawing.Text.Font font, Brush brush,
@@ -100,8 +116,9 @@ namespace DRIT.Drawing.Vector.Svg
             string? opacity = SvgBrushWriter.WriteFillOpacity(brush);
 
             _w.WriteStartElement("text");
-            _w.WriteAttribute("font-family", font.FontFamily.Name ?? "Arial");
-            _w.WriteAttribute("font-size", font.Size);
+            _w.WriteAttribute("font-family", CssFontFamily(font.FontFamily.Name));
+            // SVG font-size is in user units (pixels here); the layout above also runs at 96 dpi.
+            _w.WriteAttribute("font-size", DRIT.Drawing.Text.TextLayoutEngine.FontSizeToPixels(font.Size, font.Unit, 96f));
             if ((font.Style & FontStyle.Bold) != 0)
                 _w.WriteAttribute("font-weight", "bold");
             if ((font.Style & FontStyle.Italic) != 0)

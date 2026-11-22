@@ -42,6 +42,13 @@ namespace DRIT.Drawing.Vector.Commands
     /// </summary>
     public sealed class ResetClipCommand : DrawingCommand
     {
+        /// <summary>
+        /// Initializes a empty <see cref="ResetClipCommand"/> instance.
+        /// </summary>
+        public ResetClipCommand()
+        {
+        }
+
         /// <inheritdoc/>
         internal override void Replay(IDrawingContext ctx)
             => ctx.ResetClip();

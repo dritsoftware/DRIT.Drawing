@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace DRIT.Drawing.Codecs.Jpeg
@@ -28,9 +29,9 @@ namespace DRIT.Drawing.Codecs.Jpeg
             _restartInterval = restartInterval;
         }
 
-        public EntropyDecodeResult Decode(BitReader reader)
+        public EntropyDecodeResult Decode(IReadOnlyList<byte[]> entropySegments)
         {
-            if (reader == null) throw new ArgumentNullException(nameof(reader));
+            if (entropySegments == null) throw new ArgumentNullException(nameof(entropySegments));
 
             int componentCount = _frame.Components.Length;
             if (componentCount == 0)
@@ -61,7 +62,8 @@ namespace DRIT.Drawing.Codecs.Jpeg
                 int height = mcuCountY * v * 8;
                 planeWidths[i] = width;
                 planeHeights[i] = height;
-                planes[i] = new byte[width * height];
+                int planeLength = CodecValidation.CheckedBufferLength(checked((long)width * height), "JPEG component plane");
+                planes[i] = new byte[planeLength];
             }
 
             var scanToFrame = new int[_scan.Components.Length];
@@ -88,10 +90,29 @@ namespace DRIT.Drawing.Codecs.Jpeg
             var blockPixels = new byte[64];
             int decodedMcus = 0;
 
-            for (int mcuY = 0; mcuY < mcuCountY; mcuY++)
+            // A scan with a single component is non-interleaved: its MCU is one block, in raster order, over the
+            // component's own ceil(width/8) x ceil(height/8) grid, whatever sampling factors the frame declares.
+            bool nonInterleaved = _scan.Components.Length == 1;
+            int scanMcuCountX = mcuCountX, scanMcuCountY = mcuCountY;
+            if (nonInterleaved)
             {
-                for (int mcuX = 0; mcuX < mcuCountX; mcuX++)
+                var only = _frame.Components[scanToFrame[0]];
+                scanMcuCountX = (((_frame.Width * only.HSampling + maxH - 1) / maxH) + 7) / 8;
+                scanMcuCountY = (((_frame.Height * only.VSampling + maxV - 1) / maxV) + 7) / 8;
+            }
+            int totalMcus = scanMcuCountX * scanMcuCountY;
+
+            foreach (byte[] entropySegment in entropySegments)
+            {
+                var reader = new BitReader(entropySegment);
+                int segmentMcuCount = _restartInterval > 0
+                    ? Math.Min(_restartInterval, totalMcus - decodedMcus)
+                    : totalMcus - decodedMcus;
+
+                for (int segmentMcu = 0; segmentMcu < segmentMcuCount; segmentMcu++)
                 {
+                    int mcuX = decodedMcus % scanMcuCountX;
+                    int mcuY = decodedMcus / scanMcuCountX;
                     for (int scanIndex = 0; scanIndex < _scan.Components.Length; scanIndex++)
                     {
                         int frameIndex = scanToFrame[scanIndex];
@@ -105,8 +126,8 @@ namespace DRIT.Drawing.Codecs.Jpeg
                         var acTable = _acTables[scanComponent.AcTableId]
                             ?? throw new InvalidDataException($"Missing AC Huffman table {scanComponent.AcTableId}.");
 
-                        int hSamples = frameComponent.HSampling;
-                        int vSamples = frameComponent.VSampling;
+                        int hSamples = nonInterleaved ? 1 : frameComponent.HSampling;
+                        int vSamples = nonInterleaved ? 1 : frameComponent.VSampling;
 
                         for (int v = 0; v < vSamples; v++)
                         {
@@ -130,13 +151,15 @@ namespace DRIT.Drawing.Codecs.Jpeg
                     }
 
                     decodedMcus++;
-                    if (_restartInterval > 0 && (decodedMcus % _restartInterval) == 0)
-                    {
-                        Array.Clear(dcPredictors, 0, dcPredictors.Length);
-                        reader.Flush();
-                    }
                 }
+
+                if (_restartInterval > 0 && decodedMcus < totalMcus)
+                    Array.Clear(dcPredictors, 0, dcPredictors.Length);
+
             }
+
+            if (decodedMcus != totalMcus)
+                throw new InvalidDataException("JPEG entropy data ended before all MCUs were decoded.");
 
             return new EntropyDecodeResult(
                 planes,
@@ -158,8 +181,12 @@ namespace DRIT.Drawing.Codecs.Jpeg
             Array.Clear(coeffs, 0, 64);
 
             int dcLength = dcTable.Decode(reader);
+            if (dcLength > 16)
+                throw new InvalidDataException("JPEG DC coefficient size is invalid.");
             int dcDiff = ReceiveAndExtend(reader, dcLength);
-            dcPredictor += dcDiff;
+            dcPredictor = checked(dcPredictor + dcDiff);
+            if (dcPredictor < short.MinValue || dcPredictor > short.MaxValue)
+                throw new InvalidDataException("JPEG DC predictor exceeds the supported coefficient range.");
             coeffs[0] = dcPredictor;
 
             int k = 1;
@@ -169,10 +196,15 @@ namespace DRIT.Drawing.Codecs.Jpeg
                 int run = (rs >> 4) & 0xF;
                 int size = rs & 0xF;
 
+                if (size > 15)
+                    throw new InvalidDataException("JPEG AC coefficient size is invalid.");
+
                 if (size == 0)
                 {
                     if (run == 15)
                     {
+                        if (k + 16 > 64)
+                            throw new InvalidDataException("JPEG AC zero run exceeds the coefficient block.");
                         k += 16;
                         continue;
                     }
@@ -182,7 +214,7 @@ namespace DRIT.Drawing.Codecs.Jpeg
 
                 k += run;
                 if (k >= 64)
-                    break;
+                    throw new InvalidDataException("JPEG AC run exceeds the coefficient block.");
 
                 int value = ReceiveAndExtend(reader, size);
                 coeffs[QuantizationTable.ZigZagOrder[k]] = value;
@@ -194,6 +226,8 @@ namespace DRIT.Drawing.Codecs.Jpeg
         {
             if (bitCount == 0)
                 return 0;
+            if (bitCount > 16)
+                throw new InvalidDataException("JPEG coefficient bit count is invalid.");
 
             int value = reader.ReadBits(bitCount);
             int threshold = 1 << (bitCount - 1);
@@ -205,7 +239,12 @@ namespace DRIT.Drawing.Codecs.Jpeg
         private static void Dequantize(int[] coeffs, int[] quant)
         {
             for (int i = 0; i < 64; i++)
-                coeffs[i] *= quant[i];
+            {
+                long value = (long)coeffs[i] * quant[i];
+                if (value < int.MinValue || value > int.MaxValue)
+                    throw new InvalidDataException("JPEG dequantized coefficient exceeds the supported range.");
+                coeffs[i] = (int)value;
+            }
         }
 
         private static void WriteBlock(

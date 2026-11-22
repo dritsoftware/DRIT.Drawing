@@ -11,15 +11,26 @@ namespace DRIT.Drawing.Font.Encoding
     public sealed class TtfUnicodeEncoding : IFontEncoding
     {
         private readonly TtfCMapFormatBaseTable _cmapTable;
+        private readonly bool _legacySymbolFont;
 
         /// <param name="cmapTable">
         /// The best Unicode-capable subtable as returned by
         /// <see cref="TtfCMapTable.FindUnicodeTable"/>.
         /// Must not be null.
         /// </param>
+        /// <summary>Creates a Unicode encoding without legacy symbol-font mapping.</summary>
         public TtfUnicodeEncoding(TtfCMapFormatBaseTable cmapTable)
+            : this(cmapTable, false)
+        {
+        }
+
+        /// <summary>Creates a Unicode encoding with optional legacy symbol-font mapping.</summary>
+        /// <param name="cmapTable">The Unicode-capable character map table.</param>
+        /// <param name="legacySymbolFont">Whether to apply the Windows private-use symbol mapping.</param>
+        public TtfUnicodeEncoding(TtfCMapFormatBaseTable cmapTable, bool legacySymbolFont)
         {
             _cmapTable = cmapTable;
+            _legacySymbolFont = legacySymbolFont;
         }
 
         /// <inheritdoc/>
@@ -30,6 +41,8 @@ namespace DRIT.Drawing.Font.Encoding
         public GlyphId? DecodeToGid(uint codePoint)
         {
             uint glyphIndex = _cmapTable.GetGlyphIndex(codePoint);
+            if (glyphIndex == 0 && _legacySymbolFont && codePoint <= 0xFF)
+                glyphIndex = _cmapTable.GetGlyphIndex(0xF000u | codePoint);
             return new GlyphUInt32Id(glyphIndex);
         }
 
@@ -39,11 +52,11 @@ namespace DRIT.Drawing.Font.Encoding
         /// <inheritdoc/>
         public bool TryGetGlyph(uint codePoint, out uint glyphId)
         {
-            glyphId = _cmapTable.GetGlyphIndex(codePoint);
+            glyphId = DecodeToGid(codePoint) is GlyphUInt32Id id ? id.Value : 0;
             return glyphId != 0;
         }
 
         /// <inheritdoc/>
-        public bool HasGlyph(uint codePoint) => _cmapTable.GetGlyphIndex(codePoint) != 0;
+        public bool HasGlyph(uint codePoint) => DecodeToGid(codePoint) is GlyphUInt32Id id && id.Value != 0;
     }
 }

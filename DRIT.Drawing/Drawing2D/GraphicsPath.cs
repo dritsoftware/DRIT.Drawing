@@ -24,6 +24,21 @@ namespace DRIT.Drawing.Drawing2D
         private FillMode              _fillMode;
         private bool                  _newFigure = true;
 
+        internal bool PreferPolygon16 { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether a native polygon record that fills this path must not also
+        /// outline it with whichever pen happens to be selected.
+        /// </summary>
+        internal bool FillPolygon16WithoutOutline { get; set; }
+
+        internal bool PreferPolyPolygon16 { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether logical-scale line segments should use 16-bit polyline records.
+        /// </summary>
+        public bool PreferPolyline16 { get; set; }
+
         private const float EllipseKappa = 0.5522847498f;
         private const float DefaultFlatness = 0.25f;
 
@@ -1144,7 +1159,14 @@ namespace DRIT.Drawing.Drawing2D
         /// <returns>A new <see cref="GraphicsPath"/> that is a copy of this instance.</returns>
         public GraphicsPath Clone()
         {
-            var c = new GraphicsPath(_fillMode) { _newFigure = _newFigure };
+            var c = new GraphicsPath(_fillMode)
+            {
+                _newFigure = _newFigure,
+                PreferPolygon16 = PreferPolygon16,
+                FillPolygon16WithoutOutline = FillPolygon16WithoutOutline,
+                PreferPolyPolygon16 = PreferPolyPolygon16,
+                PreferPolyline16 = PreferPolyline16,
+            };
             c._points.AddRange(_points);
             c._types.AddRange(_types);
             return c;

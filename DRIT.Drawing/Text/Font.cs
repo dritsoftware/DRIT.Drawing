@@ -9,7 +9,7 @@ namespace DRIT.Drawing.Text
     /// <remarks>
     /// A <see cref="Font"/> is created from a <see cref="FontFamily"/> and size,
     /// and can be styled with <see cref="FontStyle"/> flags. Fonts are used with
-    /// <see cref="Graphics.DrawString"/> to render text.
+    /// <c>Graphics.DrawString</c> to render text.
     /// </remarks>
     public sealed class Font : IDisposable
     {

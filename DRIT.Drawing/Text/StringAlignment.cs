@@ -18,6 +18,16 @@ namespace DRIT.Drawing.Text
         /// <summary>
         /// Align text far (right for horizontal, bottom for vertical).
         /// </summary>
-        Far = 2
+        Far = 2,
+
+        /// <summary>
+        /// Expand spaces on non-final wrapped lines to fill the layout width.
+        /// </summary>
+        Justify = 3,
+
+        /// <summary>
+        /// Distribute additional space between all characters to fill the layout width.
+        /// </summary>
+        Distributed = 4
     }
 }

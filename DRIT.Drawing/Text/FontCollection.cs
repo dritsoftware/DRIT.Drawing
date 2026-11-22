@@ -11,6 +11,13 @@ namespace DRIT.Drawing.Text
     /// </summary>
     public abstract class FontCollection : IDisposable
     {
+        /// <summary>
+        /// Initializes a empty <see cref="FontCollection"/> instance.
+        /// </summary>
+        protected FontCollection()
+        {
+        }
+
         private readonly Dictionary<string, FontFamily> _familiesByName = new Dictionary<string, FontFamily>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>

@@ -9,6 +9,13 @@ namespace DRIT.Drawing.Metafile
     public class MetafileDocument
     {
         /// <summary>
+        /// Initializes a empty <see cref="MetafileDocument"/> instance.
+        /// </summary>
+        public MetafileDocument()
+        {
+        }
+
+        /// <summary>
         /// Gets or sets the metafile format.
         /// </summary>
         public MetafileFormat Format { get; set; }
@@ -52,5 +59,7 @@ namespace DRIT.Drawing.Metafile
         /// Gets or sets the placeable header.
         /// </summary>
         internal META_PLACEABLE? PlaceableHeader { get; set; }
+
+        internal bool InvertWmfYAxis { get; set; }
     }
 }

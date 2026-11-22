@@ -136,7 +136,13 @@ namespace DRIT.Drawing.Font.Ttf
             {
                 var best = t.CMapTable.FindUnicodeTable();
                 if (best != null)
-                    return new TtfUnicodeEncoding(best);
+                {
+                    string family = t.Name.FamilyName ?? string.Empty;
+                    bool legacySymbolFont = family.Equals("Symbol", StringComparison.OrdinalIgnoreCase)
+                        || family.StartsWith("Wingdings", StringComparison.OrdinalIgnoreCase)
+                        || family.Equals("Webdings", StringComparison.OrdinalIgnoreCase);
+                    return new TtfUnicodeEncoding(best, legacySymbolFont);
+                }
             }
             return NullEncoding.Instance;
         }

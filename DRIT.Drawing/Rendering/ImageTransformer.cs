@@ -12,6 +12,8 @@ namespace DRIT.Drawing.Rendering
     /// </summary>
     internal static class ImageTransformer
     {
+        /// <param name="dst">The destination bitmap.</param>
+        /// <param name="src">The source bitmap.</param>
         /// <param name="destPoints">
         /// Three points that define the parallelogram:
         ///   [0] = top-left, [1] = top-right, [2] = bottom-left.

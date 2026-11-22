@@ -13,6 +13,11 @@ namespace DRIT.Drawing.Text
         public float         Width      { get; set; }
         public float         LineHeight { get; set; }
 
+        internal bool         IsLastLineOfParagraph { get; set; } = true;
+        internal bool         TokenizeNativeText { get; set; }
+        internal float        ExtraCharacterSpacing { get; set; }
+        internal float        ExtraSpaceSpacing { get; set; }
+
         /// <summary>Maximum ascent across all runs (for mixed-size lines).</summary>
         public float         Ascent     { get; set; }
 

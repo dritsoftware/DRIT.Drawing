@@ -6,7 +6,7 @@ namespace DRIT.Drawing.Text
     /// Encapsulates text layout information such as alignment, format flags, and tab stops.
     /// </summary>
     /// <remarks>
-    /// A <see cref="StringFormat"/> is used with <see cref="Graphics.DrawString"/> to control
+    /// A <see cref="StringFormat"/> is used with <c>Graphics.DrawString</c> to control
     /// text alignment, line spacing, trimming, and other formatting options.
     /// </remarks>
     public sealed class StringFormat : IDisposable
@@ -20,6 +20,11 @@ namespace DRIT.Drawing.Text
         /// Gets or sets the vertical text alignment.
         /// </summary>
         public StringAlignment LineAlignment     { get; set; } = StringAlignment.Near;
+
+        /// <summary>
+        /// Gets or sets the additional horizontal indentation of the first visual line.
+        /// </summary>
+        public float FirstLineIndent             { get; set; }
 
         /// <summary>
         /// Gets or sets the trimming behavior for text that overflows the layout rectangle.
@@ -61,6 +66,7 @@ namespace DRIT.Drawing.Text
 
             Alignment = format.Alignment;
             LineAlignment = format.LineAlignment;
+            FirstLineIndent = format.FirstLineIndent;
             Trimming = format.Trimming;
             FormatFlags = format.FormatFlags;
             HotkeyPrefix = format.HotkeyPrefix;

@@ -25,7 +25,7 @@ namespace DRIT.Drawing.Font.Type1
 
         /// <summary>
         /// Glyph names in the order they were encountered during parsing.
-        /// Index in this array is the glyph index used by <see cref="IGlyphAccessor"/>.
+        /// Index in this array is the glyph index used by <see cref="DRIT.Drawing.Font.Glyphs.IGlyphAccessor"/>.
         /// </summary>
         public string[] GlyphOrder = System.Array.Empty<string>();
 

@@ -35,6 +35,7 @@ namespace DRIT.Drawing.Rendering
         {
             public Color Color = Color.Transparent;
             public bool IsNull = true;
+            public Bitmap? PatternBitmap;
         }
 
         private sealed class FontState
@@ -102,6 +103,7 @@ namespace DRIT.Drawing.Rendering
             var currentBrush = new BrushState();
             var currentFont = new FontState();
             var textColor = Color.Black;
+            var brushOrigin = new Point(0, 0);
 
             GraphicsPath? pathBuilder = null;
             var pathCurrentPoint = new PointF(0f, 0f);
@@ -231,14 +233,14 @@ namespace DRIT.Drawing.Rendering
                     case EMR_POLYGON polygon when polygon.Points.Length >= 2:
                     {
                         var points = MapPoints(viewport, polygon.Points);
-                        FillPolygon(ctx, currentBrush, points);
+                        FillPolygon(ctx, currentBrush, points, viewport.MapPoint(brushOrigin.X, brushOrigin.Y));
                         DrawPolygon(ctx, currentPen, points);
                         break;
                     }
                     case EMR_POLYGON16 polygon16 when polygon16.Points.Length >= 2:
                     {
                         var points = MapPointsS(viewport, polygon16.Points);
-                        FillPolygon(ctx, currentBrush, points);
+                        FillPolygon(ctx, currentBrush, points, viewport.MapPoint(brushOrigin.X, brushOrigin.Y));
                         DrawPolygon(ctx, currentPen, points);
                         break;
                     }
@@ -249,7 +251,7 @@ namespace DRIT.Drawing.Rendering
                         RectangleF rect = viewport.MapRect(
                             rectangle.Box.Left, rectangle.Box.Top,
                             rectangle.Box.Right, rectangle.Box.Bottom);
-                        FillRectangle(ctx, currentBrush, rect);
+                        FillRectangle(ctx, currentBrush, rect, viewport.MapPoint(brushOrigin.X, brushOrigin.Y));
                         DrawRectangle(ctx, currentPen, rect);
                         break;
                     }
@@ -258,7 +260,7 @@ namespace DRIT.Drawing.Rendering
                         RectangleF rect = viewport.MapRect(
                             ellipse.Box.Left, ellipse.Box.Top,
                             ellipse.Box.Right, ellipse.Box.Bottom);
-                        FillEllipse(ctx, currentBrush, rect);
+                        FillEllipse(ctx, currentBrush, rect, viewport.MapPoint(brushOrigin.X, brushOrigin.Y));
                         DrawEllipse(ctx, currentPen, rect);
                         break;
                     }
@@ -294,14 +296,14 @@ namespace DRIT.Drawing.Rendering
                     case EMR_FILLPATH _:
                     {
                         if (pathBuilder != null && pathBuilder.PointCount > 0)
-                            FillPathDirect(ctx, currentBrush, pathBuilder);
+                            FillPathDirect(ctx, currentBrush, pathBuilder, viewport.MapPoint(brushOrigin.X, brushOrigin.Y));
                         break;
                     }
                     case EMR_STROKEANDFILLPATH _:
                     {
                         if (pathBuilder != null && pathBuilder.PointCount > 0)
                         {
-                            FillPathDirect(ctx, currentBrush, pathBuilder);
+                            FillPathDirect(ctx, currentBrush, pathBuilder, viewport.MapPoint(brushOrigin.X, brushOrigin.Y));
                             DrawPathDirect(ctx, currentPen, pathBuilder);
                         }
                         break;
@@ -309,11 +311,15 @@ namespace DRIT.Drawing.Rendering
 
                     // ── Object table ──
                     case EMR_CREATEPEN createPen:
-                        objects[createPen.IhPen] = CreatePenState(createPen.Pen);
+                        objects[createPen.IhPen] = CreatePenState(createPen);
                         break;
 
                     case EMR_CREATEBRUSHINDIRECT createBrush:
                         objects[createBrush.IhBrush] = CreateBrushState(createBrush.LogBrush);
+                        break;
+
+                    case EMR_CREATEDIBPATTERNBRUSHPT createPatternBrush:
+                        objects[createPatternBrush.IhBrush] = CreatePatternBrushState(createPatternBrush);
                         break;
 
                     case EMR_EXTCREATEFONTINDIRECTW createFont:
@@ -334,6 +340,10 @@ namespace DRIT.Drawing.Rendering
                     }
                     case EMR_DELETEOBJECT deleteObject:
                         objects.Remove(deleteObject.ObjectIndex);
+                        break;
+
+                    case EMR_SETBRUSHORGEX setBrushOrigin:
+                        brushOrigin = new Point(setBrushOrigin.X, setBrushOrigin.Y);
                         break;
 
                     // ── Transforms ──
@@ -444,6 +454,21 @@ namespace DRIT.Drawing.Rendering
                     }
 
                     // ── Image ──
+                    case EMR_BITBLT bitBlt when IsPatCopy(bitBlt.BitBltRasterOperation):
+                    {
+                        var destRect = viewport.MapRect(
+                            bitBlt.XDest, bitBlt.YDest,
+                            bitBlt.XDest + bitBlt.CxDest,
+                            bitBlt.YDest + bitBlt.CyDest);
+                        var mappedOrigin = viewport.MapPoint(brushOrigin.X, brushOrigin.Y);
+                        if (currentBrush.PatternBitmap != null)
+                            FillTextureRectangle(ctx, currentBrush.PatternBitmap, destRect, mappedOrigin);
+                        else if (!currentBrush.IsNull)
+                            FillRectangle(ctx, currentBrush, destRect, mappedOrigin);
+                        break;
+                    }
+                    case EMR_BITBLT bitBlt when IsDestinationCopy(bitBlt.BitBltRasterOperation):
+                        break;
                     case EMR_STRETCHDIBITS dibits:
                     {
                         var destRect = viewport.MapRect(
@@ -494,12 +519,12 @@ namespace DRIT.Drawing.Rendering
             return result;
         }
 
-        private static PenState CreatePenState(Metafile.Wmf.Objects.Pen pen)
+        private static PenState CreatePenState(EMR_CREATEPEN pen)
         {
             return new PenState
             {
                 Color = ToColor(pen.ColorRef),
-                Width = Math.Max(1f, Math.Abs(pen.Width.x)),
+                Width = Math.Max(1f, Math.Abs(pen.WidthX)),
                 IsNull = pen.PenStyle == Metafile.Wmf.Enumerations.PenStyle.PS_NULL,
             };
         }
@@ -510,6 +535,16 @@ namespace DRIT.Drawing.Rendering
             {
                 Color = ToColor(brush.ColorRef),
                 IsNull = brush.BrushStyle == Metafile.Wmf.Enumerations.BrushStyle.BS_NULL,
+            };
+        }
+
+        private static BrushState CreatePatternBrushState(EMR_CREATEDIBPATTERNBRUSHPT brush)
+        {
+            Bitmap? bitmap = DibToBitmap(brush.Bmi, brush.Bits);
+            return new BrushState
+            {
+                IsNull = bitmap == null,
+                PatternBitmap = bitmap,
             };
         }
 
@@ -552,10 +587,10 @@ namespace DRIT.Drawing.Rendering
             ctx.DrawPath(pen, path);
         }
 
-        private static void FillPathDirect(IDrawingContext ctx, BrushState brushState, GraphicsPath path)
+        private static void FillPathDirect(IDrawingContext ctx, BrushState brushState, GraphicsPath path, PointF patternOrigin)
         {
             if (brushState.IsNull) return;
-            using var brush = new SolidBrush(brushState.Color);
+            using Brush brush = CreateFillBrush(brushState, patternOrigin);
             ctx.FillPath(brush, path);
         }
 
@@ -586,10 +621,10 @@ namespace DRIT.Drawing.Rendering
             ctx.DrawPath(pen, path);
         }
 
-        private static void FillPolygon(IDrawingContext ctx, BrushState brushState, PointF[] points)
+        private static void FillPolygon(IDrawingContext ctx, BrushState brushState, PointF[] points, PointF patternOrigin)
         {
             if (brushState.IsNull) return;
-            using var brush = new SolidBrush(brushState.Color);
+            using Brush brush = CreateFillBrush(brushState, patternOrigin);
             var path = new GraphicsPath();
             path.AddPolygon(points);
             ctx.FillPath(brush, path);
@@ -604,13 +639,33 @@ namespace DRIT.Drawing.Rendering
             ctx.DrawPath(pen, path);
         }
 
-        private static void FillRectangle(IDrawingContext ctx, BrushState brushState, RectangleF rect)
+        private static void FillRectangle(IDrawingContext ctx, BrushState brushState, RectangleF rect, PointF patternOrigin)
         {
             if (brushState.IsNull) return;
-            using var brush = new SolidBrush(brushState.Color);
+            using Brush brush = CreateFillBrush(brushState, patternOrigin);
             var path = new GraphicsPath();
             path.AddRectangle(rect);
             ctx.FillPath(brush, path);
+        }
+
+        private static void FillTextureRectangle(
+            IDrawingContext ctx, Bitmap pattern, RectangleF rect, PointF patternOrigin)
+        {
+            using var brush = new TextureBrush(pattern);
+            brush.TranslateTransform(patternOrigin.X, patternOrigin.Y);
+            var path = new GraphicsPath();
+            path.AddRectangle(rect);
+            ctx.FillPath(brush, path);
+        }
+
+        private static Brush CreateFillBrush(BrushState brushState, PointF patternOrigin)
+        {
+            if (brushState.PatternBitmap == null)
+                return new SolidBrush(brushState.Color);
+
+            var brush = new TextureBrush(brushState.PatternBitmap);
+            brush.TranslateTransform(patternOrigin.X, patternOrigin.Y);
+            return brush;
         }
 
         private static void DrawEllipse(IDrawingContext ctx, PenState penState, RectangleF rect)
@@ -622,10 +677,10 @@ namespace DRIT.Drawing.Rendering
             ctx.DrawPath(pen, path);
         }
 
-        private static void FillEllipse(IDrawingContext ctx, BrushState brushState, RectangleF rect)
+        private static void FillEllipse(IDrawingContext ctx, BrushState brushState, RectangleF rect, PointF patternOrigin)
         {
             if (brushState.IsNull) return;
-            using var brush = new SolidBrush(brushState.Color);
+            using Brush brush = CreateFillBrush(brushState, patternOrigin);
             var path = new GraphicsPath();
             path.AddEllipse(rect);
             ctx.FillPath(brush, path);
@@ -649,7 +704,7 @@ namespace DRIT.Drawing.Rendering
 
                 var format = bpp switch
                 {
-                    32 => PixelFormat.Format32bppArgb,
+                    32 => PixelFormat.Format32bppRgb,
                     24 => PixelFormat.Format24bppRgb,
                     _ => PixelFormat.Format32bppArgb,
                 };
@@ -658,6 +713,15 @@ namespace DRIT.Drawing.Rendering
                 int stride = Bitmap.CalcStride(width, format);
                 int copyLen = Math.Min(bits.Length, stride * height);
                 Buffer.BlockCopy(bits, 0, bmp._pixels, 0, copyLen);
+
+                if (bpp == 32)
+                {
+                    for (int y = 0; y < height; y++)
+                    {
+                        for (int x = 0; x < width; x++)
+                            bmp._pixels[y * stride + x * 4 + 3] = 255;
+                    }
+                }
 
                 if (topDown)
                 {
@@ -689,6 +753,16 @@ namespace DRIT.Drawing.Rendering
                 Buffer.BlockCopy(pixels, bot, pixels, top, stride);
                 Buffer.BlockCopy(temp, 0, pixels, bot, stride);
             }
+        }
+
+        private static bool IsPatCopy(Metafile.Emf.Enumerations.EmfTernaryRasterOperation operation)
+        {
+            return operation == Metafile.Emf.Enumerations.EmfTernaryRasterOperation.PATCOPY;
+        }
+
+        private static bool IsDestinationCopy(Metafile.Emf.Enumerations.EmfTernaryRasterOperation operation)
+        {
+            return operation == Metafile.Emf.Enumerations.EmfTernaryRasterOperation.D;
         }
     }
 }

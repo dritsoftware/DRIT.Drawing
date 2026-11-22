@@ -6,7 +6,7 @@
     internal enum PostScriptJoin
     {
         /// <summary>
-        ///     Specifies that the line-joining style has not been set, and that a default style MAY <28> be used.
+        ///     Specifies that the line-joining style has not been set, and that a default style MAY <c>28</c> be used.
         /// </summary>
         PostScriptNotSet = -2,
 

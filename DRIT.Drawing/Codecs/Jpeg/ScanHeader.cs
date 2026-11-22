@@ -33,8 +33,10 @@ namespace DRIT.Drawing.Codecs.Jpeg
                 throw new InvalidDataException("SOS segment too short.");
 
             int ns = data[0];
-            if (data.Length < 1 + ns * 2 + 3)
-                throw new InvalidDataException("SOS segment truncated.");
+            if (ns < 1 || ns > 4)
+                throw new InvalidDataException("SOS component count is out of range.");
+            if (data.Length != 1 + ns * 2 + 3)
+                throw new InvalidDataException("SOS segment length does not match its component count.");
 
             var sh = new ScanHeader();
             sh.Components = new ScanComponent[ns];
@@ -42,11 +44,20 @@ namespace DRIT.Drawing.Codecs.Jpeg
             {
                 int off  = 1 + i * 2;
                 byte sel = data[off + 1];
+                int dcTable = (sel >> 4) & 0xF;
+                int acTable = sel & 0xF;
+                if (dcTable > 3 || acTable > 3)
+                    throw new InvalidDataException("SOS Huffman table identifier is out of range.");
+                for (int previous = 0; previous < i; previous++)
+                {
+                    if (sh.Components[previous].ComponentId == data[off])
+                        throw new InvalidDataException("SOS contains duplicate component identifiers.");
+                }
                 sh.Components[i] = new ScanComponent
                 {
                     ComponentId = data[off],
-                    DcTableId   = (byte)((sel >> 4) & 0xF),
-                    AcTableId   = (byte)(sel & 0xF),
+                    DcTableId   = (byte)dcTable,
+                    AcTableId   = (byte)acTable,
                 };
             }
 
@@ -56,6 +67,14 @@ namespace DRIT.Drawing.Codecs.Jpeg
             byte ahAl = data[tail + 2];
             sh.Ah = (ahAl >> 4) & 0xF;
             sh.Al =  ahAl       & 0xF;
+            if (sh.Ss > 63 || sh.Se > 63 || sh.Ss > sh.Se)
+                throw new InvalidDataException("SOS spectral selection range is invalid.");
+            if (sh.Ah > 13 || sh.Al > 13)
+                throw new InvalidDataException("SOS successive approximation is out of range.");
+            if (sh.Ss == 0 && sh.Se == 0 && sh.Ah != 0 && sh.Ah != sh.Al + 1)
+                throw new InvalidDataException("SOS DC successive approximation is invalid.");
+            if (sh.Ss != 0 && sh.Ah != 0 && sh.Ah != sh.Al + 1)
+                throw new InvalidDataException("SOS AC successive approximation is invalid.");
             return sh;
         }
     }

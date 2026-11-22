@@ -44,23 +44,39 @@ namespace DRIT.Drawing.Codecs.Jpeg
             {
                 int scanComponentIndex = 0;
                 int frameComponentIndex = scanToFrame[0];
-                int blocksX = buffer.GetBlocksX(frameComponentIndex);
-                int blocksY = buffer.GetBlocksY(frameComponentIndex);
+                // A non-interleaved scan covers ceil(componentWidth / 8) x ceil(componentHeight / 8) blocks
+                // (T.81 A.2.3), not the MCU-padded grid the coefficient buffer is allocated with. Reading
+                // the padding blocks desynchronises the bit stream whenever the two differ.
+                var scanComponent = _frame.Components[frameComponentIndex];
+                int componentWidth = (_frame.Width * scanComponent.HSampling + buffer.MaxHorizontalSampling - 1)
+                    / buffer.MaxHorizontalSampling;
+                int componentHeight = (_frame.Height * scanComponent.VSampling + buffer.MaxVerticalSampling - 1)
+                    / buffer.MaxVerticalSampling;
+                int blocksX = Math.Min(buffer.GetBlocksX(frameComponentIndex), (componentWidth + 7) / 8);
+                int blocksY = Math.Min(buffer.GetBlocksY(frameComponentIndex), (componentHeight + 7) / 8);
 
                 for (int by = 0; by < blocksY; by++)
                 {
                     for (int bx = 0; bx < blocksX; bx++)
                     {
-                        DecodeBlock(
-                            scan,
-                            scanComponentIndex,
-                            frameComponentIndex,
-                            bx,
-                            by,
-                            reader,
-                            buffer,
-                            dcPredictors,
-                            ref eobRun);
+                        try
+                        {
+                            DecodeBlock(
+                                scan,
+                                scanComponentIndex,
+                                frameComponentIndex,
+                                bx,
+                                by,
+                                reader,
+                                buffer,
+                                dcPredictors,
+                                ref eobRun);
+                        }
+                        catch (EndOfStreamException ex)
+                        {
+                            throw new InvalidDataException(
+                                $"Progressive JPEG entropy ended in component {scan.Components[scanComponentIndex].ComponentId} at block ({bx},{by}), spectral range {scan.Ss}..{scan.Se}.", ex);
+                        }
 
                         processedUnits++;
                         if (restartInterval > 0 && (processedUnits % restartInterval) == 0)
@@ -91,16 +107,24 @@ namespace DRIT.Drawing.Codecs.Jpeg
                                 int bx = mcuX * frameComponent.HSampling + h;
                                 int by = mcuY * frameComponent.VSampling + v;
 
-                                DecodeBlock(
-                                    scan,
-                                    scanComponentIndex,
-                                    frameComponentIndex,
-                                    bx,
-                                    by,
-                                    reader,
-                                    buffer,
-                                    dcPredictors,
-                                    ref eobRun);
+                                try
+                                {
+                                    DecodeBlock(
+                                        scan,
+                                        scanComponentIndex,
+                                        frameComponentIndex,
+                                        bx,
+                                        by,
+                                        reader,
+                                        buffer,
+                                        dcPredictors,
+                                        ref eobRun);
+                                }
+                                catch (EndOfStreamException ex)
+                                {
+                                    throw new InvalidDataException(
+                                        $"Progressive JPEG entropy ended in component {scan.Components[scanComponentIndex].ComponentId} at block ({bx},{by}), spectral range {scan.Ss}..{scan.Se}.", ex);
+                                }
                             }
                         }
                     }
@@ -261,13 +285,13 @@ namespace DRIT.Drawing.Codecs.Jpeg
             if (bit == 0)
                 return;
 
+            // The refinement bit is the next lower bit of the *two's complement* value (the first scan stored
+            // floor(x / 2^(Al+1)) << (Al+1), so that bit is zero): OR-ing it in adds +2^Al for negative and
+            // positive coefficients alike. Subtracting it for negative values (as an AC refinement does for
+            // magnitudes) moved dark blocks the wrong way.
             short current = buffer.GetCoefficient(componentIndex, blockX, blockY, 0);
             short delta = (short)(1 << al);
-
-            if (current >= 0)
-                buffer.AddCoefficient(componentIndex, blockX, blockY, 0, delta);
-            else
-                buffer.AddCoefficient(componentIndex, blockX, blockY, 0, (short)-delta);
+            buffer.SetCoefficient(componentIndex, blockX, blockY, 0, (short)(current | delta));
         }
 
         private static void DecodeAcInitial(
@@ -378,7 +402,14 @@ namespace DRIT.Drawing.Codecs.Jpeg
                         else
                         {
                             if (run == 0)
+                            {
+                                // A ZRL (0xF0) consumes the 16th zero coefficient. Unlike a
+                                // newly inserted coefficient, it must advance past that zero
+                                // before the next Huffman symbol is read.
+                                if (newCoefficient == 0)
+                                    k++;
                                 break;
+                            }
                             run--;
                         }
 

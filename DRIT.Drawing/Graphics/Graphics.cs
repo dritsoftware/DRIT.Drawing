@@ -30,7 +30,7 @@ namespace DRIT.Drawing
         private Point _renderingOrigin;
         private bool _disposed;
 
-        // ── Rendering-hint backing fields ──
+        // Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬ Rendering-hint backing fields Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬
         private SmoothingMode      _smoothingMode;
         private InterpolationMode  _interpolationMode;
         private CompositingMode    _compositingMode;
@@ -157,6 +157,9 @@ namespace DRIT.Drawing
             set { _pageScale = value; OnHintChanged(value); }
         }
 
+        /// <summary>
+        /// Gets or sets the fallback font chain used when the selected font does not contain a requested glyph.
+        /// </summary>
         public Text.FontFallbackChain? FontFallback { get; set; }
 
         /// <summary>
@@ -404,6 +407,40 @@ namespace DRIT.Drawing
         }
 
         /// <summary>
+        /// Draws multiple disconnected polylines with the specified pen.
+        /// Recording surfaces preserve the disconnected figures as one grouped
+        /// vector operation when the target format supports it.
+        /// </summary>
+        /// <param name="pen">The pen to draw with.</param>
+        /// <param name="polylines">The disconnected polylines to draw.</param>
+        public void DrawPolylineGroup(Pen pen, IReadOnlyList<PointF[]> polylines)
+        {
+            ThrowIfDisposed();
+            if (pen == null) throw new ArgumentNullException(nameof(pen));
+            if (polylines == null) throw new ArgumentNullException(nameof(polylines));
+
+            using var path = new GraphicsPath();
+            bool hasPolyline = false;
+            foreach (PointF[] points in polylines)
+            {
+                if (points == null || points.Length < 2)
+                    continue;
+
+                if (hasPolyline)
+                    path.StartFigure();
+                path.AddLines(ToPointFs(points));
+                hasPolyline = true;
+            }
+
+            if (!hasPolyline)
+                return;
+
+            path.PreferPolyPolygon16 = true;
+            path.PreferPolyline16 = true;
+            DrawPath(pen, path);
+        }
+
+        /// <summary>
         /// Draws a rectangle with the specified pen.
         /// </summary>
         /// <param name="pen">The pen to draw with.</param>
@@ -496,7 +533,7 @@ namespace DRIT.Drawing
         }
 
         /// <summary>
-        /// Draws a Bézier spline defined by four points with the specified pen.
+        /// Draws a BÄ‚Â©zier spline defined by four points with the specified pen.
         /// </summary>
         /// <param name="pen">The pen to draw with.</param>
         /// <param name="pt1">The starting point.</param>
@@ -514,7 +551,7 @@ namespace DRIT.Drawing
         }
 
         /// <summary>
-        /// Draws a series of Bézier splines with the specified pen.
+        /// Draws a series of BÄ‚Â©zier splines with the specified pen.
         /// </summary>
         /// <param name="pen">The pen to draw with.</param>
         /// <param name="points">The array of points defining the splines.</param>
@@ -576,6 +613,23 @@ namespace DRIT.Drawing
             if (points == null) throw new ArgumentNullException(nameof(points));
 
             using var path = new GraphicsPath();
+            path.AddPolygon(ToPointFs(points));
+            DrawPath(pen, path);
+        }
+
+        /// <summary>
+        /// Draws a polygon while requesting a native 16-bit polygon record on vector outputs.
+        /// </summary>
+        /// <param name="pen">The pen to draw with.</param>
+        /// <param name="points">The array of points defining the polygon.</param>
+        public void DrawPolygon16(Pen pen, PointF[] points)
+        {
+            ThrowIfDisposed();
+            if (pen == null) throw new ArgumentNullException(nameof(pen));
+            if (points == null) throw new ArgumentNullException(nameof(points));
+
+            using var path = new GraphicsPath();
+            path.PreferPolygon16 = true;
             path.AddPolygon(ToPointFs(points));
             DrawPath(pen, path);
         }
@@ -733,6 +787,59 @@ namespace DRIT.Drawing
 
             using var path = new GraphicsPath(fillMode);
             path.AddPolygon(ToPointFs(points));
+            FillPath(brush, path);
+        }
+
+        /// <summary>
+        /// Fills a polygon while requesting a native 16-bit polygon record on vector outputs.
+        /// </summary>
+        /// <param name="brush">The brush to fill with.</param>
+        /// <param name="points">The array of points defining the polygon.</param>
+        public void FillPolygon16(Brush brush, PointF[] points)
+            => FillPolygon16(brush, points, false);
+
+        /// <summary>
+        /// Fills a polygon while requesting a native 16-bit polygon record on vector outputs.
+        /// </summary>
+        /// <param name="brush">The brush to fill with.</param>
+        /// <param name="points">The array of points defining the polygon.</param>
+        /// <param name="suppressOutline">
+        /// <c>true</c> to keep the native record from outlining the polygon with the pen that
+        /// was selected by earlier drawing; use it when the outline is drawn separately.
+        /// </param>
+        public void FillPolygon16(Brush brush, PointF[] points, bool suppressOutline)
+        {
+            ThrowIfDisposed();
+            if (brush == null) throw new ArgumentNullException(nameof(brush));
+            if (points == null) throw new ArgumentNullException(nameof(points));
+
+            using var path = new GraphicsPath();
+            path.PreferPolygon16 = true;
+            path.FillPolygon16WithoutOutline = suppressOutline;
+            path.AddPolygon(ToPointFs(points));
+            FillPath(brush, path);
+        }
+
+        /// <summary>
+        /// Fills a group of polygons while requesting a native 16-bit polygon-group
+        /// record on vector outputs.
+        /// </summary>
+        /// <param name="brush">The brush to fill with.</param>
+        /// <param name="polygons">The polygon point arrays to fill.</param>
+        public void FillPolygons16(Brush brush, PointF[][] polygons)
+        {
+            ThrowIfDisposed();
+            if (brush == null) throw new ArgumentNullException(nameof(brush));
+            if (polygons == null) throw new ArgumentNullException(nameof(polygons));
+
+            using var path = new GraphicsPath();
+            path.PreferPolyPolygon16 = true;
+            for (int index = 0; index < polygons.Length; index++)
+            {
+                if (polygons[index] == null)
+                    throw new ArgumentException("Polygon points cannot be null.", nameof(polygons));
+                path.AddPolygon(ToPointFs(polygons[index]));
+            }
             FillPath(brush, path);
         }
 
@@ -1084,7 +1191,7 @@ public void ResetClip()
         public void CopyFromScreen(int sourceX, int sourceY, int destinationX, int destinationY, Size blockRegionSize)
             => throw new PlatformNotSupportedException("Screen capture is not supported in this implementation.");
 
-        // ── DrawImage overloads ──────────────────────────────────────────────────
+        // Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬ DrawImage overloads Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬
 
         /// <summary>
         /// Draws the specified image at the specified point.
@@ -1414,7 +1521,7 @@ public void ResetClip()
             throw new NotSupportedException("Only Bitmap and Metafile images are currently supported.");
         }
 
-        // ── DrawImage source-rect unit conversion ─────────────────────────────
+        // Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬ DrawImage source-rect unit conversion Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬
 
         private static RectangleF ToSrcPixelRect(RectangleF srcRect, GraphicsUnit srcUnit, Image src)
         {
@@ -1474,7 +1581,7 @@ public void ResetClip()
             return _clip.IsVisible(rect, this);
         }
 
-        // ── Virtual hooks for recording surfaces ──────────────────────────────────
+        // Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬ Virtual hooks for recording surfaces Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬
 
         /// <summary>
         /// Called after the world transform changes. Override in a recording
@@ -1615,8 +1722,11 @@ public void ResetClip()
 
         private PointF ToPointF(float x, float y)
             => new PointF(ToPixels(x, PageUnit), ToPixels(y, PageUnit));
+        /// <summary>
+        /// Converts a point from the current page unit to pixel coordinates.
+        /// </summary>
 
-        private PointF ToPointF(PointF p)
+        protected PointF ToPointF(PointF p)
             => new PointF(ToPixels(p.X, PageUnit), ToPixels(p.Y, PageUnit));
 
         private PointF[] ToPointFs(PointF[] points)
@@ -1627,7 +1737,10 @@ public void ResetClip()
             return arr;
         }
 
-        private RectangleF ToRectangleF(RectangleF r)
+        /// <summary>
+        /// Converts a rectangle from the current page unit to pixel coordinates.
+        /// </summary>
+        protected RectangleF ToRectangleF(RectangleF r)
             => new RectangleF(ToPixels(r.X, PageUnit), ToPixels(r.Y, PageUnit), ToPixels(r.Width, PageUnit), ToPixels(r.Height, PageUnit));
 
         private static int Clamp(int value, int min, int max)
@@ -1643,7 +1756,7 @@ public void ResetClip()
                 throw new ObjectDisposedException(nameof(Graphics));
         }
 
-        // ── DrawString overloads ─────────────────────────────────────────────
+        // Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬ DrawString overloads Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬
 
         /// <summary>
         /// Draws the specified text at the specified location with the specified brush and font.
@@ -1718,6 +1831,9 @@ public void ResetClip()
         public void DrawString(string s, Text.Font font, Brush brush, RectangleF layoutRect, StringFormat? format)
             => DrawStringCore(s, font, brush, layoutRect, format);
 
+        /// <summary>
+        /// Draws text using the supplied string, font, brush, and layout rectangle.
+        /// </summary>
         protected virtual void DrawStringCore(
             string        s,
             Text.Font          font,
@@ -1731,82 +1847,20 @@ public void ResetClip()
             if (brush == null) throw new ArgumentNullException(nameof(brush));
 
             var pixelRect = ToRectangleF(layoutRect);
-            var lines     = TextLayoutEngine.Layout(s, font, pixelRect, format, DpiX, DpiY);
-            if (lines.Count == 0) return;
-
-            var   metrics  = font.FontFamily.GetMetricsData(font.Style);
-            float emPixels = TextLayoutEngine.FontSizeToPixels(font.Size, font.Unit, DpiY);
-            float emScale  = metrics.UnitsPerEm > 0
-                ? (float)(emPixels / metrics.UnitsPerEm)
-                : 1f;
-
-            IFont?               fontFace  = font.FontFamily.GetFontFace(font.Style);
-            GlyphOutlineRenderer? renderer  = fontFace != null
-                ? new GlyphOutlineRenderer(fontFace)
-                : null;
-            GlyphRasterizer?     rasterizer = renderer != null ? new GlyphRasterizer() : null;
-
-            // Decoration metrics (design units → pixels)
-            float ulY  = (float)(metrics.UnderlinePosition  * emScale);  // typically negative (below baseline)
-            float ulH  = Math.Max(1f, (float)(metrics.UnderlineThickness * emScale));
-            float soY  = (float)(metrics.StrikeoutPosition  * emScale);  // typically positive (above baseline)
-            float soH  = Math.Max(1f, (float)(metrics.StrikeoutSize      * emScale));
-
-            float firstTabOffset;
-            float[] tabStops = (format ?? StringFormat.GenericDefault).GetTabStops(out firstTabOffset);
-
-            foreach (var line in lines)
+            var richOptions = new RichTextOptions(font.FontFamily, font.Size, font.Style)
             {
-                foreach (var run in line.Runs)
-                {
-                    if (renderer != null && rasterizer != null)
-                    {
-                        float curX = run.X;
-                        foreach (char c in run.Text)
-                        {
-                            float adv = TextLayoutEngine.GetCharAdvance(
-                                c, curX - run.X,
-                                fontFace, emScale, emPixels * TextLayoutEngine.DefaultCharWidthFactor,
-                                firstTabOffset, tabStops, emPixels);
+                Unit = font.Unit,
+                Fallback = FontFallback ?? FontFallbackChain.CreateDefault(),
+            };
+            var lines = RunSegmenter.Segment(s, font, richOptions, format ?? StringFormat.GenericDefault,
+                                             richOptions.Fallback);
+            var richLines = TextLayoutEngine.Layout(lines, pixelRect, format, DpiX, DpiY);
+            if (richLines.Count == 0) return;
 
-                            if (c != '\t')
-                            {
-                                var gid = fontFace!.Encoding.DecodeToGid(c);
-                                if (gid != null)
-                                {
-                                    using var glyphPath = rasterizer.RenderGlyph(
-                                        renderer, gid, emScale, curX, run.Baseline);
-                                    if (glyphPath.PointCount > 0)
-                                        FillPath(brush, glyphPath);
-                                }
-                            }
-
-                            curX += adv;
-                        }
-                    }
-
-                    // Underline
-                    if (font.Underline && run.Width > 0f)
-                    {
-                        float ry = run.Baseline - ulY;
-                        using var ulPath = new GraphicsPath();
-                        ulPath.AddRectangle(new RectangleF(run.X, ry, run.Width, ulH));
-                        FillPath(brush, ulPath);
-                    }
-
-                    // Strikeout
-                    if (font.Strikeout && run.Width > 0f)
-                    {
-                        float ry = run.Baseline - soY;
-                        using var soPath = new GraphicsPath();
-                        soPath.AddRectangle(new RectangleF(run.X, ry, run.Width, soH));
-                        FillPath(brush, soPath);
-                    }
-                }
-            }
+            RenderMultiRunLines(richLines, brush, format ?? StringFormat.GenericDefault);
         }
 
-        // ── DrawStringOnPath overloads ───────────────────────────────────────
+        // Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬ DrawStringOnPath overloads Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬
 
         /// <summary>
         /// Draws the specified text along the given baseline path.
@@ -1867,10 +1921,10 @@ public void ResetClip()
                 s, font, baselinePath, format, pixelOptions, DpiX, DpiY);
 
             if (result.PointCount > 0)
-                FillPath(brush, result);
+                FillTextPath(brush, result);
         }
 
-        // ── MeasureString overloads ──────────────────────────────────────────
+        // Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬ MeasureString overloads Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬
 
         /// <summary>
         /// Measures the specified text when drawn with the specified font.
@@ -1965,12 +2019,18 @@ public void ResetClip()
             return new SizeF(maxW, totalH);
         }
 
-        // ── Rich text methods ───────────────────────────────────────────────
+        // Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬ Rich text methods Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬Ă˘â€ťâ‚¬
 
+        /// <summary>
+        /// Draws formatted rich text within the specified layout rectangle.
+        /// </summary>
         public void DrawRichText(string text, RichTextOptions options, Brush defaultBrush,
                                   RectangleF layoutRect)
             => DrawRichText(text, options, defaultBrush, layoutRect, null);
 
+        /// <summary>
+        /// Draws formatted rich text within the specified layout rectangle.
+        /// </summary>
         public void DrawRichText(string text, RichTextOptions options, Brush defaultBrush,
                                   RectangleF layoutRect, StringFormat? format)
         {
@@ -1992,9 +2052,13 @@ public void ResetClip()
             RenderMultiRunLines(lines, defaultBrush, sf);
         }
 
+        /// <summary>Measures rich text within the specified layout area.</summary>
         public SizeF MeasureRichText(string text, RichTextOptions options, SizeF layoutArea)
             => MeasureRichText(text, options, layoutArea, null);
 
+        /// <summary>
+        /// Measures the formatted rich text within the specified layout area.
+        /// </summary>
         public SizeF MeasureRichText(string text, RichTextOptions options, SizeF layoutArea,
                                       StringFormat? format)
         {
@@ -2024,6 +2088,37 @@ public void ResetClip()
             return new SizeF(maxW, totalH);
         }
 
+        /// <summary>
+        /// Fills glyph geometry. An explicit <see cref="TextRenderingHint"/> decides whether glyph edges are
+        /// smoothed: the antialiasing hints smooth them and the single-bit hints do not, whatever the
+        /// <see cref="SmoothingMode"/> is. <see cref="TextRenderingHint.SystemDefault"/> follows the smoothing mode.
+        /// </summary>
+        private void FillTextPath(Brush brush, GraphicsPath path)
+        {
+            SmoothingMode saved = _smoothingMode;
+            switch (_textRenderingHint)
+            {
+                case TextRenderingHint.AntiAlias:
+                case TextRenderingHint.AntiAliasGridFit:
+                case TextRenderingHint.ClearTypeGridFit:
+                    _smoothingMode = SmoothingMode.AntiAlias;
+                    break;
+                case TextRenderingHint.SingleBitPerPixel:
+                case TextRenderingHint.SingleBitPerPixelGridFit:
+                    _smoothingMode = SmoothingMode.None;
+                    break;
+            }
+
+            try
+            {
+                FillPath(brush, path);
+            }
+            finally
+            {
+                _smoothingMode = saved;
+            }
+        }
+
         private void RenderMultiRunLines(List<TextLine> lines, Brush defaultBrush,
                                           StringFormat sf)
         {
@@ -2035,6 +2130,13 @@ public void ResetClip()
 
             foreach (var line in lines)
             {
+                int visibleCharacterIndex = 0;
+                int visibleCharacterCount = 0;
+                foreach (var countRun in line.Runs)
+                    foreach (char countChar in countRun.Text)
+                        if (countChar != '\t' && countChar != '\r' && countChar != '\n')
+                            visibleCharacterCount++;
+
                 foreach (var run in line.Runs)
                 {
                     var fontFace = run.Font.FontFamily.GetFontFace(run.Font.Style);
@@ -2072,12 +2174,17 @@ public void ResetClip()
                             using var glyphPath = rasterizer.RenderGlyph(
                                 renderer, gid, emScale, curX, run.Baseline);
                             if (glyphPath.PointCount > 0)
-                                FillPath(brush, glyphPath);
+                                FillTextPath(brush, glyphPath);
                         }
 
                         curX += TextLayoutEngine.GetCharAdvance(c, curX - run.X,
                             fontFace, emScale, fallbackW,
                             firstTabOffset, tabStops, emPixels);
+                        if (c == ' ')
+                            curX += line.ExtraSpaceSpacing;
+                        if (visibleCharacterIndex < visibleCharacterCount - 1)
+                            curX += line.ExtraCharacterSpacing;
+                        visibleCharacterIndex++;
                     }
 
                     if (run.Font.Underline && run.Width > 0f)
@@ -2086,7 +2193,7 @@ public void ResetClip()
                         float ulH = Math.Max(1f, (float)(metrics.UnderlineThickness * emScale));
                         using var ulPath = new GraphicsPath();
                         ulPath.AddRectangle(new RectangleF(run.X, ulY, run.Width, ulH));
-                        FillPath(brush, ulPath);
+                        FillTextPath(brush, ulPath);
                     }
 
                     if (run.Font.Strikeout && run.Width > 0f)
@@ -2095,7 +2202,7 @@ public void ResetClip()
                         float soH = Math.Max(1f, (float)(metrics.StrikeoutSize * emScale));
                         using var soPath = new GraphicsPath();
                         soPath.AddRectangle(new RectangleF(run.X, soY, run.Width, soH));
-                        FillPath(brush, soPath);
+                        FillTextPath(brush, soPath);
                     }
                 }
             }

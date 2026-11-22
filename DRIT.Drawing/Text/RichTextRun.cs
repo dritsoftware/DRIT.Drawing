@@ -48,7 +48,7 @@ namespace DRIT.Drawing.Text
 
         /// <summary>
         /// Foreground brush override for this run, or null to use the
-        /// <c>defaultBrush</c> passed to <see cref="Graphics.DrawRichText"/>.
+        /// <c>defaultBrush</c> passed to <c>Graphics.DrawRichText</c>.
         /// </summary>
         public Brush? Brush { get; set; }
     }

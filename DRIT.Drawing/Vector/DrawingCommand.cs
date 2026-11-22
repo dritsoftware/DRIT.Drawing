@@ -7,6 +7,13 @@ namespace DRIT.Drawing.Vector
     /// </summary>
     public abstract class DrawingCommand
     {
+        /// <summary>
+        /// Initializes a empty <see cref="DrawingCommand"/> instance.
+        /// </summary>
+        protected DrawingCommand()
+        {
+        }
+
 /// <summary>
     /// Replays this command onto the specified drawing context.
     /// </summary>

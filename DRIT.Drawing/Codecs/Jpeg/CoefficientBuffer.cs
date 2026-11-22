@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 
 namespace DRIT.Drawing.Codecs.Jpeg
 {
@@ -36,9 +37,11 @@ namespace DRIT.Drawing.Codecs.Jpeg
             {
                 int bx = McuCountX * frame.Components[i].HSampling;
                 int by = McuCountY * frame.Components[i].VSampling;
+                long coefficientCount = (long)bx * by * 64;
+                CodecValidation.CheckedBufferLength(checked(coefficientCount * sizeof(short)), "JPEG coefficient buffer");
                 _blocksX[i] = bx;
                 _blocksY[i] = by;
-                _componentData[i] = new short[bx * by * 64];
+                _componentData[i] = new short[checked((int)coefficientCount)];
             }
         }
 

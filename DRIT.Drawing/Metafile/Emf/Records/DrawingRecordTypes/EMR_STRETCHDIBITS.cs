@@ -33,7 +33,7 @@ namespace DRIT.Drawing.Metafile.Emf.Records.DrawingRecordTypes
 
         public DIBColors UsageSrc;
 
-        public Wmf.Enumerations.TernaryRasterOperation BitBltRasterOperation;
+        public EmfTernaryRasterOperation BitBltRasterOperation;
 
         public int CxDest;
 
@@ -64,7 +64,7 @@ namespace DRIT.Drawing.Metafile.Emf.Records.DrawingRecordTypes
             OffBitsSrc = reader.ReadUInt32();
             CbBitsSrc = reader.ReadUInt32();
             UsageSrc = (DIBColors)reader.ReadUInt32();
-            BitBltRasterOperation = (Metafile.Wmf.Enumerations.TernaryRasterOperation)reader.ReadUInt32();
+            BitBltRasterOperation = (EmfTernaryRasterOperation)reader.ReadUInt32();
             CxDest = reader.ReadInt32();
             CyDest = reader.ReadInt32();
 

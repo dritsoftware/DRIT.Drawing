@@ -10,9 +10,4 @@
     <Nullable>enable</Nullable>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
-  <ItemGroup>
-    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
-      <_Parameter1>DRIT.Drawing.Tests</_Parameter1>
-    </AssemblyAttribute>
-  </ItemGroup>
 </Project>

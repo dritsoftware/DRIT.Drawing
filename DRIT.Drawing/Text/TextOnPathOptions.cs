@@ -9,6 +9,13 @@ namespace DRIT.Drawing.Text
     public sealed class TextOnPathOptions
     {
         /// <summary>
+        /// Initializes a empty <see cref="TextOnPathOptions"/> instance.
+        /// </summary>
+        public TextOnPathOptions()
+        {
+        }
+
+        /// <summary>
         /// Distance along the path (in page units for
         /// <c>DrawStringOnPath</c>, pixels for <c>AddStringOnPath</c>) at
         /// which to start placing the first glyph's pen position. Default 0.

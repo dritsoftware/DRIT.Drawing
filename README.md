@@ -4,9 +4,8 @@ A pure-managed .NET 2D graphics library with the same API surface as `System.Dra
 
 DRIT.Drawing is built around a **vector domain model**: any drawing performed through a `Graphics` surface can be captured as true vector output (SVG, EMF/WMF), not just rasterized to a bitmap. The same `Graphics` API produces raster, vector, or metafile output unchanged.
 
-[![.NET](https://img.shields.io/badge/.NET-netstandard2.0%20%7C%20net6.0-blue.svg)](https://dotnet.microsoft.com/)
+[![.NET](https://img.shields.io/badge/.NET-netstandard2.0-blue.svg)](https://dotnet.microsoft.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-~396%20passing-brightgreen.svg)](#building)
 
 ---
 
@@ -71,11 +70,11 @@ Key positioning:
 
 | Format | Status |
 |--------|--------|
-| **BMP** | ✅ Full read/write support |
+| **BMP** | ✅ Supported uncompressed RGB layouts; indexed and bitfield variants are not supported |
 | **PNG** | ✅ Managed codec with zlib compression |
 | **APNG** | ✅ Animated PNG — read/write, multi-frame, dispose/blend ops |
 | **GIF** | ✅ LZW compression, animation support |
-| **TIFF** | ✅ Basic read/write (no-compression, LZW) |
+| **TIFF** | ✅ Basic uncompressed RGB/RGBA read/write |
 | **ICO** | ✅ Multi-size icon support |
 | **JPEG** | ✅ Native decoder/encoder (SOF0/SOF1/SOF2) — no external JPEG dependency |
 | **SVG** | ✅ Read/write — true vector, not embedded raster |
@@ -120,12 +119,12 @@ Key positioning:
 
 | Format | Read | Write | Specification |
 |---|:---:|:---:|---|
-| **BMP** | ✅ | ✅ | Bitmap Image Format |
+| **BMP** | ✅ | ✅ | Uncompressed RGB layouts; indexed and bitfield variants are not supported |
 | **PNG** | ✅ | ✅ | Portable Network Graphics (managed zlib) |
 | **APNG** | ✅ | ✅ | Animated PNG (Mozilla APNG 1.0) |
 | **JPEG** | ✅ | ✅ | Baseline (SOF0/SOF1) + Progressive (SOF2) |
 | **GIF** | ✅ | ✅ | GIF87a/GIF89a (managed LZW, animation) |
-| **TIFF** | ✅ | ✅ | No-compression + LZW |
+| **TIFF** | ✅ | ✅ | Uncompressed RGB/RGBA; compressed and non-RGB layouts are not supported |
 | **ICO** | ✅ | ✅ | Multi-size icon/cursor |
 | **SVG** | ✅ | ✅ | SVG 1.1 (write) / SVG 1.1 + selective SVG 2 (read) |
 | **WMF** | ✅ | ✅ | Windows Metafile ([MS-WMF]) |
@@ -134,10 +133,10 @@ Key positioning:
 
 ## Platform Independence
 
-DRIT.Drawing is implemented in pure managed C# and targets **`netstandard2.0`** and **`net6.0`**, so it runs on:
+DRIT.Drawing is implemented in pure managed C# and targets **`netstandard2.0`**, so it can run on compatible versions of:
 
 - .NET Framework (via netstandard2.0)
-- .NET Core / .NET 5+ (via netstandard2.0 or net6.0)
+- .NET Core / .NET 5+ (via netstandard2.0)
 - Windows, Linux, and macOS
 
 It has **no external dependencies** — no NuGet packages, no native libraries, and no `System.Drawing.Common` installation required.
@@ -380,7 +379,7 @@ dotnet build DRIT.Drawing/DRIT.Drawing.csproj
 dotnet test DRIT.Drawing.Tests/DRIT.Drawing.Tests.csproj
 ```
 
-Requires .NET 8.0 SDK for tests. The library targets `netstandard2.0` + `net6.0`.
+Requires the .NET 8.0 SDK or later for tests. The library targets `netstandard2.0`.
 
 ## License
 

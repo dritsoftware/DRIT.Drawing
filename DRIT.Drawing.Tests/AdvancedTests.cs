@@ -23,7 +23,7 @@ namespace DRIT.Drawing.Tests
         
 
         [TestMethod]
-        public void Batch16_Bitmap_PngBmpRoundTrip_CloneAndRotateFlip()
+        public void Bitmap_PngBmpRoundTrip_CloneAndRotateFlip()
         {
             using var src = new Bitmap(16, 12);
             for (int y = 0; y < src.Height; y++)
@@ -59,7 +59,7 @@ namespace DRIT.Drawing.Tests
         }
 
         [TestMethod]
-        public void Batch16_DrawLine_BresenhamCorePixelsAreCovered()
+        public void DrawLine_BresenhamCorePixelsAreCovered()
         {
             using var bmp = new Bitmap(100, 100);
             using var g = Graphics.FromImage(bmp);
@@ -125,7 +125,7 @@ namespace DRIT.Drawing.Tests
         }
 
         [TestMethod]
-        public void Batch16_Gradient_LinearBrush_StartMidEndExpected()
+        public void Gradient_LinearBrush_StartMidEndExpected()
         {
             using var brush = new LinearGradientBrush(
                 new PointF(0f, 0f),
@@ -145,7 +145,7 @@ namespace DRIT.Drawing.Tests
         }
 
         [TestMethod]
-        public void Batch16_Clip_SetAndIntersect_RestrictsFill()
+        public void Clip_SetAndIntersect_RestrictsFill()
         {
             using var bmp = new Bitmap(100, 100);
             using var g = Graphics.FromImage(bmp);
@@ -167,7 +167,7 @@ namespace DRIT.Drawing.Tests
         }
 
         [TestMethod]
-        public void Batch16_Transform_Translate_ShiftsRasterOutput()
+        public void Transform_Translate_ShiftsRasterOutput()
         {
             using var bmp = new Bitmap(60, 60);
             using var g = Graphics.FromImage(bmp);
@@ -194,7 +194,7 @@ namespace DRIT.Drawing.Tests
         }
 
         [TestMethod]
-        public void Batch16_ImageRender_DrawImage_MatchesExpectedWithinTolerance()
+        public void ImageRender_DrawImage_MatchesExpectedWithinTolerance()
         {
             using var src = new Bitmap(8, 8);
             for (int y = 0; y < 8; y++)

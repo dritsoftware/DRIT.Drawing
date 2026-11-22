@@ -32,6 +32,8 @@ namespace DRIT.Drawing.Font.Ttf.Tables
 
         /// <param name="cmapBytes">Full "cmap" table raw bytes.</param>
         /// <param name="subtableOffset">Byte offset of this subtable within <paramref name="cmapBytes"/>.</param>
+        /// <param name="platformId">The OpenType platform identifier for this subtable.</param>
+        /// <param name="encodingId">The platform-specific encoding identifier for this subtable.</param>
         internal static TtfCMapFormat12Table? Parse(
             byte[] cmapBytes, int subtableOffset,
             ushort platformId, ushort encodingId)

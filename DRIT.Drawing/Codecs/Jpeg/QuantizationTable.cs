@@ -26,11 +26,24 @@ namespace DRIT.Drawing.Codecs.Jpeg
         /// <summary>Table destination identifier (0–3).</summary>
         public int Id { get; private set; }
 
-        /// <summary>Element at zigzag position <paramref name="z"/> (0–63) in natural order.</summary>
+        /// <summary>Element at natural-order index <paramref name="naturalIndex"/> (0–63).</summary>
         public int this[int naturalIndex] => _table[naturalIndex];
 
         /// <summary>Raw coefficients in natural row-major order (64 elements).</summary>
         public int[] Coefficients => _table;
+
+        internal bool HasZeroCoefficient
+        {
+            get
+            {
+                for (int i = 0; i < _table.Length; i++)
+                {
+                    if (_table[i] == 0)
+                        return true;
+                }
+                return false;
+            }
+        }
 
         // ── Factory ──────────────────────────────────────────────────────────────
 
@@ -45,9 +58,17 @@ namespace DRIT.Drawing.Codecs.Jpeg
             int pos = 0;
             while (pos < data.Length)
             {
+                if (data.Length - pos < 1)
+                    throw new InvalidDataException("DQT segment is truncated.");
                 byte pqTq = data[pos++];
                 int precision = (pqTq >> 4) & 0xF;  // 0 = 8-bit, 1 = 16-bit
                 int id        =  pqTq       & 0xF;
+                if (precision > 1 || id > 3)
+                    throw new InvalidDataException("DQT precision or table identifier is invalid.");
+                int bytesPerCoefficient = precision == 0 ? 1 : 2;
+                int required = checked(64 * bytesPerCoefficient);
+                if (data.Length - pos < required)
+                    throw new InvalidDataException("DQT table data is truncated.");
 
                 var qt = new QuantizationTable { Id = id };
                 for (int z = 0; z < 64; z++)

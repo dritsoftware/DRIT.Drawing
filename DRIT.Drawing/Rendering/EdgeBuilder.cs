@@ -19,6 +19,11 @@ namespace DRIT.Drawing.Rendering
 
     internal static class EdgeBuilder
     {
+        private const int MaxScanline = 1 << 30;
+
+        private static int ClampScanline(double value)
+            => (int)Math.Max(-MaxScanline, Math.Min(MaxScanline, value));
+
         public static List<EdgeSeed> Build(GraphicsPath path, float flatness = 0.25f)
         {
             if (path == null) throw new ArgumentNullException(nameof(path));
@@ -75,8 +80,11 @@ namespace DRIT.Drawing.Rendering
 
             float dxPerY = (x1 - x0) / (y1 - y0);
 
-            int yStart = (int)Math.Ceiling(y0 - 0.5f);
-            int yEndExclusive = (int)Math.Ceiling(y1 - 0.5f);
+            // Scanline numbers are ints; float coordinates beyond that range (huge viewBoxes, extreme zoom) are
+            // clamped to a range that is far outside any bitmap but safe to do arithmetic with. The edge's
+            // x position is still derived from the real, unclamped geometry below.
+            int yStart = ClampScanline(Math.Ceiling((double)y0 - 0.5));
+            int yEndExclusive = ClampScanline(Math.Ceiling((double)y1 - 0.5));
             if (yStart >= yEndExclusive)
                 return;
 

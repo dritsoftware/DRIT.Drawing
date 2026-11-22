@@ -9,6 +9,13 @@ namespace DRIT.Drawing.Imaging
     public sealed class BitmapData
     {
         /// <summary>
+        /// Initializes a empty <see cref="BitmapData"/> instance.
+        /// </summary>
+        public BitmapData()
+        {
+        }
+
+        /// <summary>
         /// Gets or sets the width of the locked portion of the bitmap in pixels.
         /// </summary>
         public int         Width       { get; set; }

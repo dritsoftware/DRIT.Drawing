@@ -37,7 +37,16 @@ namespace DRIT.Drawing.Rendering
             if (transform != null)
                 effectivePath.Transform(transform);
 
-            FillPathCore(target, effectivePath, brush, fillMode, clip, compositingMode, interpolationMode);
+            Brush deviceBrush = BrushInDeviceSpace(brush, transform);
+            try
+            {
+                FillPathCore(target, effectivePath, deviceBrush, fillMode, clip, compositingMode, interpolationMode);
+            }
+            finally
+            {
+                if (!ReferenceEquals(deviceBrush, brush))
+                    deviceBrush.Dispose();
+            }
         }
 
         public static void DrawPath(
@@ -54,9 +63,57 @@ namespace DRIT.Drawing.Rendering
             if (path == null) throw new ArgumentNullException(nameof(path));
             if (pen == null) throw new ArgumentNullException(nameof(pen));
 
-            GraphicsPath widened = StrokeExpander.Expand(path, pen, transform, 0.25f);
-            FillPath(target, widened, pen.Brush, null, FillMode.Winding, clip, smoothingMode, compositingMode, interpolationMode);
+            // Pen width, dashes and caps are measured in world units, so the stroke is built before the
+            // transform is applied: a scaled transform then scales the pen with the geometry. The flatness
+            // and the one-pixel minimum width are device quantities and are converted to world units.
+            float maxScale = MaxScale(transform);
+            GraphicsPath widened = StrokeExpander.Expand(path, pen, null, 0.25f / maxScale, 0.5f / maxScale);
+            FillPath(target, widened, pen.Brush, transform, FillMode.Winding, clip, smoothingMode, compositingMode, interpolationMode);
         }
+
+        /// <summary>The largest factor by which <paramref name="transform"/> stretches a vector.</summary>
+        private static float MaxScale(Matrix? transform)
+        {
+            if (transform == null || transform.IsIdentity)
+                return 1f;
+
+            float[] m = transform.Elements;
+            float sx = (float)Math.Sqrt(m[0] * m[0] + m[1] * m[1]);
+            float sy = (float)Math.Sqrt(m[2] * m[2] + m[3] * m[3]);
+            float scale = Math.Max(sx, sy);
+            return scale > 1e-6f && !float.IsNaN(scale) && !float.IsInfinity(scale) ? scale : 1f;
+        }
+
+        /// <summary>
+        /// Brushes live in world space, like the geometry they fill. Returns a copy of a gradient or
+        /// texture brush whose transform also applies <paramref name="toDevice"/>, or the brush itself
+        /// when nothing has to change. A returned copy must be disposed by the caller.
+        /// </summary>
+        private static Brush BrushInDeviceSpace(Brush brush, Matrix? toDevice)
+        {
+            if (toDevice == null || toDevice.IsIdentity)
+                return brush;
+
+            switch (brush)
+            {
+                case LinearGradientBrush _:
+                case PathGradientBrush _:
+                case TextureBrush _:
+                    Brush copy = brush.Clone();
+                    switch (copy)
+                    {
+                        case LinearGradientBrush linear: linear.MultiplyTransform(toDevice, MatrixOrder.Append); break;
+                        case PathGradientBrush radial: radial.MultiplyTransform(toDevice, MatrixOrder.Append); break;
+                        case TextureBrush texture: texture.MultiplyTransform(toDevice, MatrixOrder.Append); break;
+                    }
+                    return copy;
+                default:
+                    return brush;
+            }
+        }
+
+        private static int ClampToInt(double value, int minimum, int maximum)
+            => (int)Math.Max(minimum, Math.Min(maximum, value));
 
         private static void FillPathAntialiased(
             Bitmap target,
@@ -68,38 +125,81 @@ namespace DRIT.Drawing.Rendering
             CompositingMode compositingMode,
             InterpolationMode interpolationMode)
         {
-            int w2 = target.Width * 2;
-            int h2 = target.Height * 2;
+            // A solid colour does not depend on where an area sits in the bitmap, so the work can be limited to
+            // the pixels the path can touch (a page-sized bitmap per path is very slow for a page of many paths).
+            // Any other brush samples by bitmap position and keeps the whole bitmap.
+            Rectangle clipRect = ClipToBounds(clip, target.Width, target.Height);
+            Rectangle area = new Rectangle(0, 0, target.Width, target.Height);
+            Rectangle? hiClip = null;
+            if (brush is SolidBrush && compositingMode == CompositingMode.SourceOver)
+            {
+                RectangleF bounds = path.GetBounds(transform);
+                if (float.IsNaN(bounds.Left) || float.IsNaN(bounds.Top) || float.IsNaN(bounds.Right) || float.IsNaN(bounds.Bottom))
+                    return;
 
-            using var hi = new Bitmap(w2, h2, PixelFormat.Format32bppArgb);
+                // Clamp before converting: bounds beyond the int range (huge viewBoxes, extreme zoom) must
+                // still cover the clip instead of wrapping around and drawing nothing.
+                int left = ClampToInt(Math.Floor((double)bounds.Left) - 2, clipRect.X, clipRect.Right);
+                int top = ClampToInt(Math.Floor((double)bounds.Top) - 2, clipRect.Y, clipRect.Bottom);
+                int right = ClampToInt(Math.Ceiling((double)bounds.Right) + 2, clipRect.X, clipRect.Right);
+                int bottom = ClampToInt(Math.Ceiling((double)bounds.Bottom) + 2, clipRect.Y, clipRect.Bottom);
+                if (right <= left || bottom <= top)
+                    return;
+
+                clipRect = new Rectangle(left, top, right - left, bottom - top);
+                area = clipRect;
+            }
+            else if (clip.HasValue)
+            {
+                hiClip = new Rectangle(clip.Value.X * 2, clip.Value.Y * 2, clip.Value.Width * 2, clip.Value.Height * 2);
+            }
+
+            // The high-resolution bitmap covers `area` at twice the size.
+            using var hi = new Bitmap(area.Width * 2, area.Height * 2, PixelFormat.Format32bppArgb);
             GraphicsPath hiPath = path.Clone();
 
             var aaTransform = new Matrix(2f, 0f, 0f, 2f, 0f, 0f);
             if (transform != null)
                 aaTransform.Multiply(transform, MatrixOrder.Append);
+            aaTransform.Translate(-area.X * 2f, -area.Y * 2f, MatrixOrder.Append);
             hiPath.Transform(aaTransform);
 
-            Rectangle? hiClip = null;
-            if (clip.HasValue)
-                hiClip = new Rectangle(clip.Value.X * 2, clip.Value.Y * 2, clip.Value.Width * 2, clip.Value.Height * 2);
+            Brush hiBrush = BrushInDeviceSpace(brush, aaTransform);
+            try
+            {
+                FillPathCore(hi, hiPath, hiBrush, fillMode, hiClip, CompositingMode.SourceOver, interpolationMode);
+            }
+            finally
+            {
+                if (!ReferenceEquals(hiBrush, brush))
+                    hiBrush.Dispose();
+            }
 
-            FillPathCore(hi, hiPath, brush, fillMode, hiClip, CompositingMode.SourceOver, interpolationMode);
-
-            Rectangle clipRect = ClipToBounds(clip, target.Width, target.Height);
             for (int y = clipRect.Y; y < clipRect.Bottom; y++)
             {
                 for (int x = clipRect.X; x < clipRect.Right; x++)
                 {
-                    Color c00 = hi.GetPixel(x * 2, y * 2);
-                    Color c10 = hi.GetPixel(x * 2 + 1, y * 2);
-                    Color c01 = hi.GetPixel(x * 2, y * 2 + 1);
-                    Color c11 = hi.GetPixel(x * 2 + 1, y * 2 + 1);
+                    int hx = (x - area.X) * 2;
+                    int hy = (y - area.Y) * 2;
+                    Color c00 = hi.GetPixel(hx, hy);
+                    Color c10 = hi.GetPixel(hx + 1, hy);
+                    Color c01 = hi.GetPixel(hx, hy + 1);
+                    Color c11 = hi.GetPixel(hx + 1, hy + 1);
+
+                    // The colour is the average of the covered samples, weighted by their alpha: a transparent
+                    // sample has no colour, and counting it as black would darken every edge of a shape.
+                    int alphaSum = c00.A + c10.A + c01.A + c11.A;
+                    if (alphaSum == 0)
+                    {
+                        PixelCompositor.BlendPixel(target, x, y, Color.FromArgb(0, 0, 0, 0), compositingMode);
+                        continue;
+                    }
 
                     Color avg = Color.FromArgb(
-                        (c00.A + c10.A + c01.A + c11.A + 2) / 4,
-                        (c00.R + c10.R + c01.R + c11.R + 2) / 4,
-                        (c00.G + c10.G + c01.G + c11.G + 2) / 4,
-                        (c00.B + c10.B + c01.B + c11.B + 2) / 4);
+                        (alphaSum + 2) / 4,
+                        (c00.R * c00.A + c10.R * c10.A + c01.R * c01.A + c11.R * c11.A + alphaSum / 2) / alphaSum,
+                        (c00.G * c00.A + c10.G * c10.A + c01.G * c01.A + c11.G * c11.A + alphaSum / 2) / alphaSum,
+                        (c00.B * c00.A + c10.B * c10.A + c01.B * c01.A + c11.B * c11.A + alphaSum / 2) / alphaSum);
 
                     PixelCompositor.BlendPixel(target, x, y, avg, compositingMode);
                 }
@@ -143,6 +243,19 @@ namespace DRIT.Drawing.Rendering
 
             var active = new List<ActiveEdge>();
             var spans = new ScanlineBuffer();
+
+            foreach (var bucket in buckets)
+            {
+                if (bucket.Key >= minY)
+                    continue;
+
+                foreach (var edge in bucket.Value)
+                {
+                    var visibleEdge = edge;
+                    visibleEdge.CurrentX += visibleEdge.DxPerY * (minY - bucket.Key);
+                    active.Add(visibleEdge);
+                }
+            }
 
             for (int y = minY; y < maxYEx; y++)
             {
@@ -198,13 +311,14 @@ namespace DRIT.Drawing.Rendering
             if (x1 <= x0)
                 return;
 
-            int xs = (int)Math.Ceiling(x0);
-            int xe = (int)Math.Floor(x1 - 1e-6f);
-            if (xe < xs)
+            // Clamp in double precision before converting: spans of huge shapes extend far beyond the int range.
+            double xsd = Math.Ceiling((double)x0);
+            double xed = Math.Floor((double)x1 - 1e-6);
+            if (double.IsNaN(xsd) || double.IsNaN(xed) || xed < xsd)
                 return;
 
-            if (xs < clipRect.X) xs = clipRect.X;
-            if (xe >= clipRect.Right) xe = clipRect.Right - 1;
+            int xs = (int)Math.Max(clipRect.X, Math.Min(clipRect.Right, xsd));
+            int xe = (int)Math.Min(clipRect.Right - 1, Math.Max(clipRect.X - 1, xed));
             if (xe < xs)
                 return;
 

@@ -16,6 +16,8 @@ namespace DRIT.Drawing.Metafile.Emf
 
     internal class EmfReader
     {
+        private const uint EmfPlusCommentIdentifier = 0x2B464D45;
+
         public List<Record> Records = new List<Record>();
 
         //public MetaHeader Header { get; private set; }
@@ -41,7 +43,8 @@ namespace DRIT.Drawing.Metafile.Emf
 
                 }
 
-                if (header.Type == RecordType.EMR_COMMENT)
+                if (header.Type == RecordType.EMR_COMMENT
+                    && commentPayloadStartsWithEmfPlus(record))
                 {
                     byte[] commentPayload = record switch
                     {
@@ -59,6 +62,18 @@ namespace DRIT.Drawing.Metafile.Emf
                 this.Records.Add(record);
                 stream.Position = expectedEndPosition;
             }
+        }
+
+        private static bool commentPayloadStartsWithEmfPlus(Record record)
+        {
+            byte[] payload = record switch
+            {
+                EMR_COMMENT commentRecord => commentRecord.CommentData,
+                _ => record.Data,
+            };
+
+            return payload.Length >= 4
+                && BitConverter.ToUInt32(payload, 0) == EmfPlusCommentIdentifier;
         }
 
         public static Record? CreateRecord(RecordHeader header, BinaryReader reader)

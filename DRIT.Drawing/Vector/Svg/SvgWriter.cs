@@ -25,6 +25,9 @@ namespace DRIT.Drawing.Vector.Svg
             if (scene == null) throw new ArgumentNullException(nameof(scene));
 
             var p = parameters ?? SvgEncoderParameters.Default;
+                if (!p.EmbedImages)
+                    throw new NotSupportedException(
+                        "SVG external images require an external-resource directory or URI base.");
 
             var settings = new XmlWriterSettings
             {

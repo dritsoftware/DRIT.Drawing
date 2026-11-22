@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace DRIT.Drawing.Codecs.Jpeg
@@ -11,9 +12,26 @@ namespace DRIT.Drawing.Codecs.Jpeg
     internal sealed class JpegReader
     {
         private readonly Stream _stream;
+        private readonly bool _strictMarkers;
 
-        public JpegReader(Stream stream) =>
-            _stream = stream ?? throw new ArgumentNullException(nameof(stream));
+        /// <param name="stream">The JPEG stream.</param>
+        /// <param name="strictMarkers">
+        /// When true, any byte between segments that is not the start of a marker is an error. By default such
+        /// bytes are skipped until the next marker, which is what libjpeg does (it only warns).
+        /// </param>
+        public JpegReader(Stream stream, bool strictMarkers = false)
+        {
+            _stream = ValidateStream(stream);
+            _strictMarkers = strictMarkers;
+        }
+
+        private static Stream ValidateStream(Stream stream)
+        {
+            if (stream == null) throw new ArgumentNullException(nameof(stream));
+            if (stream.CanSeek && stream.Length - stream.Position > CodecValidation.MaxSourceBytes)
+                throw new InvalidDataException("JPEG source exceeds the configured input limit.");
+            return stream;
+        }
 
         // ── Public position ──────────────────────────────────────────────────────
 
@@ -32,7 +50,11 @@ namespace DRIT.Drawing.Codecs.Jpeg
             // Skip padding / find leading 0xFF
             int b = ReadByteOrThrow();
             while (b != 0xFF)
+            {
+                if (_strictMarkers)
+                    throw new InvalidDataException("Unexpected data between JPEG segments.");
                 b = ReadByteOrThrow();
+            }
 
             // Skip 0xFF fill bytes
             int marker;
@@ -69,17 +91,56 @@ namespace DRIT.Drawing.Codecs.Jpeg
         /// The returned data is de-stuffed (0xFF 0x00 becomes 0xFF) and restart
         /// markers are removed. Stream position is left at the next marker.
         /// </summary>
-        public byte[] ReadEntropyData()
+        /// <param name="maxSegments">Upper bound for the number of restart intervals (see <see cref="ReadEntropySegments"/>).</param>
+        /// <param name="allowMissingEoi">See <see cref="ReadEntropySegments"/>.</param>
+        public byte[] ReadEntropyData(int maxSegments = int.MaxValue, bool allowMissingEoi = false)
+        {
+            var segments = ReadEntropySegments(maxSegments, allowMissingEoi);
+            long totalLength = 0;
+            foreach (var segment in segments)
+                totalLength += segment.Length;
+
+            int length = CodecValidation.CheckedBufferLength(totalLength, "JPEG entropy data");
+            var data = new byte[length];
+            int offset = 0;
+            foreach (var segment in segments)
+            {
+                Buffer.BlockCopy(segment, 0, data, offset, segment.Length);
+                offset += segment.Length;
+            }
+
+            return data;
+        }
+
+        /// <summary>
+        /// Reads entropy-coded data as independently byte-aligned segments separated by
+        /// restart markers. The returned segments are de-stuffed and do not include markers.
+        /// </summary>
+        /// <param name="maxSegments">
+        /// Largest number of restart intervals the frame can contain (at most one per MCU or block).
+        /// The caller derives it from the frame header; exceeding it means the input is not a valid scan.
+        /// </param>
+        /// <param name="allowMissingEoi">
+        /// When true, entropy data that runs to the end of the stream (a missing EOI marker, as written by
+        /// some cameras and seen in truncated downloads) ends the scan instead of being an error.
+        /// </param>
+        public IReadOnlyList<byte[]> ReadEntropySegments(int maxSegments = int.MaxValue, bool allowMissingEoi = false)
         {
             if (!_stream.CanSeek)
                 throw new NotSupportedException("Entropy segment reading requires a seekable stream.");
 
+            var segments = new List<byte[]>();
             using var ms = new MemoryStream();
+            int expectedRestart = 0;
             while (true)
             {
                 int b = _stream.ReadByte();
                 if (b < 0)
-                    break;
+                {
+                    if (allowMissingEoi)
+                        break;
+                    throw new EndOfStreamException("Unexpected end of JPEG entropy data; EOI marker is missing.");
+                }
 
                 if (b != 0xFF)
                 {
@@ -89,7 +150,11 @@ namespace DRIT.Drawing.Codecs.Jpeg
 
                 int next = _stream.ReadByte();
                 if (next < 0)
-                    break;
+                {
+                    if (allowMissingEoi)
+                        break;
+                    throw new EndOfStreamException("Unexpected end of JPEG entropy data; EOI marker is missing.");
+                }
 
                 // Stuffed entropy byte.
                 if (next == 0x00)
@@ -103,19 +168,34 @@ namespace DRIT.Drawing.Codecs.Jpeg
                 {
                     next = _stream.ReadByte();
                     if (next < 0)
-                        return ms.ToArray();
+                    {
+                        if (allowMissingEoi)
+                            goto EndOfData;
+                        throw new EndOfStreamException("Unexpected end of JPEG entropy data; EOI marker is missing.");
+                    }
                 }
 
                 // Restart markers belong to entropy coding; skip marker bytes and continue.
                 if (next >= 0xD0 && next <= 0xD7)
+                {
+                    // A restart interval holds at least one MCU, so the frame geometry bounds the count.
+                    CodecValidation.ValidateCount(segments.Count + 1, maxSegments, "JPEG restart interval count");
+                    segments.Add(ms.ToArray());
+                    ms.SetLength(0);
+                    if (next != 0xD0 + expectedRestart)
+                        throw new InvalidDataException($"Unexpected JPEG restart marker RST{next - 0xD0}; expected RST{expectedRestart}.");
+                    expectedRestart = (expectedRestart + 1) & 7;
                     continue;
+                }
 
                 // Rewind to the marker prefix so ReadMarker() can consume it.
                 _stream.Seek(-2, SeekOrigin.Current);
                 break;
             }
 
-            return ms.ToArray();
+        EndOfData:
+            segments.Add(ms.ToArray());
+            return segments;
         }
 
         /// <summary>
@@ -154,6 +234,7 @@ namespace DRIT.Drawing.Codecs.Jpeg
         private int _byteIndex;
         private int _buffer;    // up to 32 bits buffered
         private int _bitsLeft;  // valid bits in _buffer
+        private bool _streamEnded;
 
         public BitReader(Stream stream) =>
             _stream = stream ?? throw new ArgumentNullException(nameof(stream));
@@ -181,13 +262,57 @@ namespace DRIT.Drawing.Codecs.Jpeg
         /// <summary>Discard <paramref name="n"/> bits that were already peeked.</summary>
         public void ConsumeBits(int n) => _bitsLeft -= n;
 
+        internal int BitsAvailable => _bitsLeft;
+
+        internal void EnsureOnlyPaddingRemains()
+        {
+            // Bits are loaded a whole byte at a time, so anything beyond the unfinished byte (the low
+            // `_bitsLeft & 7` ... bits are the padding of the last byte) is unread data.
+            int padding = _bitsLeft & 7;
+            if (_bitsLeft - padding > 0 || (_bytes != null && _byteIndex < _bytes.Length))
+                throw new InvalidDataException("JPEG entropy contains data after the final decoded symbol.");
+
+            if (padding > 0)
+            {
+                int mask = (1 << padding) - 1;
+                if ((_buffer & mask) != mask)
+                    throw new InvalidDataException("JPEG entropy padding bits are invalid.");
+            }
+        }
+
+        /// <summary>
+        /// Returns the next 16 bits of entropy data without consuming them, loading as many whole bytes as the
+        /// buffer can hold. <paramref name="valid"/> is the number of those bits that really come from the
+        /// stream (fewer than 16 only at the very end); the remaining low bits are zero and must never be
+        /// treated as data.
+        /// </summary>
+        internal int Peek16(out int valid)
+        {
+            while (_bitsLeft <= 24 && TryFillByte())
+            {
+            }
+
+            if (_bitsLeft >= 16)
+            {
+                valid = 16;
+                return (_buffer >> (_bitsLeft - 16)) & 0xFFFF;
+            }
+
+            valid = _bitsLeft;
+            return (_buffer << (16 - _bitsLeft)) & 0xFFFF;
+        }
+
         /// <summary>Read a single bit (0 or 1).</summary>
         public int ReadBit() => ReadBits(1);
 
         // ── Byte-aligned access (used after restart markers) ─────────────────────
 
         /// <summary>Discard any partial byte; reset buffer. Call after a restart marker.</summary>
-        public void Flush() { _buffer = 0; _bitsLeft = 0; }
+        public void Flush()
+        {
+            // Drop only the unfinished byte; whole bytes that were prefetched belong to the next interval.
+            _bitsLeft -= _bitsLeft & 7;
+        }
 
         // ── Private ──────────────────────────────────────────────────────────────
 
@@ -197,18 +322,52 @@ namespace DRIT.Drawing.Codecs.Jpeg
                 FillByte();
         }
 
+        /// <summary>Loads one byte if the entropy data has one left; false at the end of the data.</summary>
+        private bool TryFillByte()
+        {
+            if (_bytes != null)
+            {
+                if (_byteIndex >= _bytes.Length)
+                    return false;
+                _buffer = (_buffer << 8) | _bytes[_byteIndex++];
+                _bitsLeft += 8;
+                return true;
+            }
+
+            // Stream mode: a marker or the end of the stream ends the data; the error is raised when a
+            // caller actually needs more bits (FillByte).
+            if (_streamEnded)
+                return false;
+            try
+            {
+                FillByte();
+                return true;
+            }
+            catch (EndOfStreamException)
+            {
+                _streamEnded = true;
+                return false;
+            }
+        }
+
         private void FillByte()
         {
             if (_bytes != null)
             {
-                int value = _byteIndex < _bytes.Length ? _bytes[_byteIndex++] : 0;
+                if (_byteIndex >= _bytes.Length)
+                    throw new EndOfStreamException("Unexpected end of JPEG entropy data.");
+
+                int value = _bytes[_byteIndex++];
                 _buffer = (_buffer << 8) | value;
                 _bitsLeft += 8;
                 return;
             }
 
+            if (_streamEnded)
+                throw new EndOfStreamException("Unexpected end of JPEG entropy data.");
             int b = _stream!.ReadByte();
-            if (b < 0) { _buffer = (_buffer << 8) | 0xFF; _bitsLeft += 8; return; }
+            if (b < 0)
+                throw new EndOfStreamException("Unexpected end of JPEG entropy data.");
 
             if (b == 0xFF)
             {
@@ -220,15 +379,16 @@ namespace DRIT.Drawing.Codecs.Jpeg
                 }
                 else if (next >= 0xD0 && next <= 0xD7)
                 {
-                    // Restart marker — treat as end-of-scan; stuff zeros
-                    b = 0; _buffer = (_buffer << 8) | b; _bitsLeft += 8; return;
+                    throw new InvalidDataException("Restart marker encountered while reading a non-segmented JPEG entropy stream.");
                 }
                 else if (next == 0xD9 || next == 0xDA)
                 {
-                    // EOI or next SOS — end of entropy data
-                    b = 0;
+                    throw new EndOfStreamException("JPEG entropy data ended before the next symbol was complete.");
                 }
-                // else: unknown marker in entropy data; ignore
+                else
+                {
+                    throw new InvalidDataException($"Unexpected marker 0xFF{next:X2} in JPEG entropy data.");
+                }
             }
             _buffer = (_buffer << 8) | b;
             _bitsLeft += 8;

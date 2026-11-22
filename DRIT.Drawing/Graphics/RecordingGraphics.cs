@@ -74,17 +74,23 @@ namespace DRIT.Drawing
         /// <inheritdoc/>
         protected override void DrawImageCore(Image image, RectangleF destRect, RectangleF srcRect,
                                              GraphicsUnit srcUnit, ImageAttributes? attr)
-            => _scene.Add(new DrawImageCommand(image, destRect, srcRect, srcUnit, attr));
+            => _scene.Add(new DrawImageCommand(image, ToRectangleF(destRect), srcRect, srcUnit, attr));
 
         /// <inheritdoc/>
         protected override void DrawImageCore(Image image, PointF[] destPoints, RectangleF srcRect,
                                              GraphicsUnit srcUnit, ImageAttributes? attr)
-            => _scene.Add(new DrawImageAffineCommand(image, destPoints, srcRect, srcUnit, attr));
+        {
+            var devicePoints = new PointF[destPoints.Length];
+            for (int index = 0; index < destPoints.Length; index++)
+                devicePoints[index] = ToPointF(destPoints[index]);
+            _scene.Add(new DrawImageAffineCommand(image, devicePoints, srcRect, srcUnit, attr));
+        }
 
         /// <inheritdoc/>
         protected override void DrawStringCore(string s, Text.Font font, Brush brush,
                                                 RectangleF layoutRect, StringFormat? format)
-            => _scene.Add(new DrawStringCommand(s, font, brush, layoutRect, format));
+            => _scene.Add(new DrawStringCommand(s, font, brush,
+                ToRectangleF(layoutRect), format));
 
         /// <inheritdoc/>
         protected override void ClearCore(Color color)

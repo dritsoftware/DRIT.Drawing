@@ -157,7 +157,7 @@ namespace DRIT.Drawing.Tests
                 },
             };
 
-            var eofRecord = new EMR_EOF { NumberOfRecords = 3 };
+            var eofRecord = new EMR_EOF { SizeLast = 20 };
 
             var document = new MetafileDocument
             {

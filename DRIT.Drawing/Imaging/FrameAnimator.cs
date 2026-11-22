@@ -40,6 +40,13 @@ namespace DRIT.Drawing.Imaging
             {
                 var frame = _frames[i];
 
+                // The canvas holds the previously drawn frame exactly as it was displayed, so that frame's
+                // disposal happens now, before this one is drawn. Doing it here (rather than "when a later frame
+                // is requested in the same call") makes stepping forward one frame at a time identical to
+                // composing from the start.
+                if (i > 0)
+                    ApplyDispose(_output, _frames[i - 1]);
+
                 if (frame.DisposeMethod == FrameDisposeMethod.Previous)
                     SnapshotRegion(_output, _previous, frame.Bounds);
 
@@ -47,9 +54,6 @@ namespace DRIT.Drawing.Imaging
                     BlendSource(_output, frame);
                 else
                     BlendOver(_output, frame);
-
-                if (i < targetIndex)
-                    ApplyDispose(_output, frame);
             }
 
             _lastComposedIndex = targetIndex;
@@ -92,11 +96,17 @@ namespace DRIT.Drawing.Imaging
                         canvas[d + 3] = src[s + 3];
                         continue;
                     }
+                    // Both the frame and the canvas hold straight (non-premultiplied) colour, so the destination
+                    // colour is weighted by its own alpha: out = (src*sa + dst*da*(1-sa)) / outA.
+                    int da = canvas[d + 3];
                     int inv = 255 - sa;
-                    canvas[d] = (byte)((src[s] * sa + canvas[d] * inv) / 255);
-                    canvas[d + 1] = (byte)((src[s + 1] * sa + canvas[d + 1] * inv) / 255);
-                    canvas[d + 2] = (byte)((src[s + 2] * sa + canvas[d + 2] * inv) / 255);
-                    canvas[d + 3] = (byte)(sa + canvas[d + 3] * inv / 255);
+                    int denominator = sa * 255 + da * inv;          // = 255 * outA
+                    if (denominator == 0)
+                        continue;
+                    canvas[d] = (byte)((src[s] * sa * 255 + canvas[d] * da * inv + denominator / 2) / denominator);
+                    canvas[d + 1] = (byte)((src[s + 1] * sa * 255 + canvas[d + 1] * da * inv + denominator / 2) / denominator);
+                    canvas[d + 2] = (byte)((src[s + 2] * sa * 255 + canvas[d + 2] * da * inv + denominator / 2) / denominator);
+                    canvas[d + 3] = (byte)((denominator + 127) / 255);
                 }
             }
         }

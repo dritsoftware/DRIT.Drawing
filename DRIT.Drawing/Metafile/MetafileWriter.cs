@@ -13,6 +13,13 @@ namespace DRIT.Drawing.Metafile
     /// </summary>
     public class MetafileWriter
     {
+        /// <summary>
+        /// Initializes a empty <see cref="MetafileWriter"/> instance.
+        /// </summary>
+        public MetafileWriter()
+        {
+        }
+
         private const uint DefaultEmfPlusCommentIdentifier = 0x2B464D45;
 
         /// <summary>
@@ -108,23 +115,44 @@ namespace DRIT.Drawing.Metafile
         private static void WriteEmf(MetafileDocument document, Stream stream)
         {
             using var writer = new BinaryWriter(stream, System.Text.Encoding.Default, leaveOpen: true);
+            var serializedRecords = new List<(Metafile.Emf.Records.Record Record, byte[] Payload, Metafile.Emf.Records.RecordHeader Header)>();
+            long totalBytes = 0;
 
             foreach (var record in document.EmfRecords)
             {
-                var payload = SerializeEmfPayload(record);
+                var payload = PadEmfPayload(SerializeEmfPayload(record));
                 var header = record.Header;
-
-                if (header.Size == 0)
-                {
-                    header.Size = checked((uint)(payload.Length + 8));
-                }
-
-                header.Write(writer);
-                writer.Write(payload);
-
-                long expectedEndPosition = writer.BaseStream.Position - payload.Length + header.Size - 8;
-                writer.BaseStream.Position = expectedEndPosition;
+                header.Size = checked((uint)(payload.Length + 8));
+                serializedRecords.Add((record, payload, header));
+                totalBytes = checked(totalBytes + header.Size);
             }
+
+            if (serializedRecords.Count > 0 && serializedRecords[0].Record is Metafile.Emf.Records.StateRecordTypes.EMR_HEADER)
+            {
+                var headerRecord = (Metafile.Emf.Records.StateRecordTypes.EMR_HEADER)serializedRecords[0].Record;
+                headerRecord.HeaderObject.Bytes = checked((uint)totalBytes);
+                headerRecord.HeaderObject.Records = checked((uint)serializedRecords.Count);
+                var headerPayload = serializedRecords[0].Payload;
+                if (headerPayload.Length >= 48)
+                    Buffer.BlockCopy(BitConverter.GetBytes(checked((uint)totalBytes)), 0, headerPayload, 40, 4);
+                if (headerPayload.Length >= 52)
+                    Buffer.BlockCopy(BitConverter.GetBytes(checked((uint)serializedRecords.Count)), 0, headerPayload, 44, 4);
+            }
+
+            foreach (var item in serializedRecords)
+            {
+                item.Header.Write(writer);
+                writer.Write(item.Payload);
+            }
+        }
+
+        private static byte[] PadEmfPayload(byte[] payload)
+        {
+            int paddedLength = (payload.Length + 3) & ~3;
+            if (paddedLength == payload.Length) return payload;
+            var padded = new byte[paddedLength];
+            Buffer.BlockCopy(payload, 0, padded, 0, payload.Length);
+            return padded;
         }
 
         private static void WriteEmfPlus(MetafileDocument document, Stream stream)
